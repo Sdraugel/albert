@@ -2,7 +2,7 @@
 
 **Give Claude Code a goal and walk away. A roster of specialized agents plans it, splits
 the work, builds it in parallel, reviews and QAs its own output, and merges when the
-critics sign off, while a live Stark-style HUD shows you every agent as it works.**
+critics sign off, while a live high tech HUD shows you every agent as it works.**
 
 ![The Albert Console graph view: a radial arc-reactor with the orchestrator at the core and specialist agents lighting up as they run](assets/graph.png)
 
