@@ -407,11 +407,69 @@ button {
 #view-comms.active { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 #view-graph.active { display: block; height: 100%; min-height: 0; }
 #view-sessions.active { display: block; height: 100%; min-height: 0; }
-#view-chat.active { display: block; height: 100%; min-height: 0; }
+/* ============================ chat dock (fly-up Albert Chat) ============================ */
 
-/* ============================ chat (embedded Albert Chat) ============================ */
-
-#chatWrap { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+/* Sits above the scanline overlay (--z-scan) and below tooltip/modal, so those still win.
+   Closed state stays in the DOM so the embedded chat keeps its websocket and history. */
+#chatDock {
+  position: fixed;
+  right: var(--s4);
+  bottom: var(--s4);
+  z-index: 50;
+  width: min(420px, calc(100vw - 2 * var(--s5)));
+  height: min(620px, calc(100vh - 96px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #04121a; /* opaque: the dock floats over live views */
+  opacity: 0;
+  transform: translateY(16px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--tr-fast), transform var(--tr-fast), visibility 0s linear 150ms;
+}
+#chatDock.open {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity var(--tr-fast), transform var(--tr-fast);
+}
+.chat-dock-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-bottom: var(--edge);
+}
+.chat-dock-title {
+  flex: 1;
+  color: var(--cyan-hi);
+  font-size: var(--fs-xs);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--track);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-dock-pop,
+#chatClose {
+  font-size: var(--fs-xs);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--track);
+  color: var(--cyan-70);
+  border: 1px solid var(--cyan-25);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  min-height: 26px;
+  background: var(--cyan-06);
+  text-decoration: none;
+  transition: background var(--tr-fast);
+}
+.chat-dock-pop:hover { background: var(--cyan-16); }
+#chatClose { color: var(--gold-hi); border-color: var(--gold-45); background: var(--gold-10); }
+#chatClose:hover { background: var(--gold-20); }
+.chat-dock-body { position: relative; flex: 1; min-height: 0; }
 #chatFrame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 #chatOffline {
   position: absolute;
@@ -422,7 +480,7 @@ button {
   justify-content: center;
   gap: var(--s3);
   text-align: center;
-  padding: var(--s6);
+  padding: var(--s5);
 }
 #chatOffline[hidden] { display: none; }
 .chat-offline-title { color: var(--cyan-70); letter-spacing: 0.2em; }

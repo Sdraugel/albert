@@ -66,7 +66,7 @@
     </svg>
     <span class="rail-label">SESSIONS</span>
   </button>
-  <button class="rail-btn" data-view="chat" type="button" aria-label="Chat view">
+  <button id="chatBtn" class="rail-btn" type="button" aria-label="Toggle chat" aria-expanded="false">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
       <line x1="8" y1="9.5" x2="16" y2="9.5" stroke="currentColor" stroke-width="1.3"/>
@@ -108,23 +108,28 @@
     </div>
   </section>
 
-  <section id="view-chat" class="view" aria-label="Chat">
-    <div id="chatWrap" class="panel">
-      <i class="c4" aria-hidden="true"></i>
-      <div class="hud-tab hud-tab-top" aria-hidden="true">A.L.B.E.R.T. Direct Line</div>
-      <iframe id="chatFrame" title="Albert Chat" hidden></iframe>
-      <div id="chatOffline" hidden>
-        <div class="chat-offline-title">ALBERT CHAT OFFLINE</div>
-        <div class="chat-offline-body">
-          The chat service is not running on <span class="num">127.0.0.1:4401</span>.<br>
-          Start it with <span class="num">chat\setup.cmd</span> (first time) then
-          <span class="num">chat\start.cmd</span> in the Albert repo.
-        </div>
-        <button id="chatRetry" type="button">RETRY</button>
-      </div>
-    </div>
-  </section>
 </main>
+
+<aside id="chatDock" class="panel" role="complementary" aria-label="Albert Chat">
+  <i class="c4" aria-hidden="true"></i>
+  <div class="chat-dock-head">
+    <span class="chat-dock-title">A.L.B.E.R.T. DIRECT LINE</span>
+    <a class="chat-dock-pop" href="http://127.0.0.1:4401/" target="_blank" rel="noopener">FULL</a>
+    <button id="chatClose" type="button" aria-label="Close chat">CLOSE</button>
+  </div>
+  <div class="chat-dock-body">
+    <iframe id="chatFrame" title="Albert Chat" hidden></iframe>
+    <div id="chatOffline" hidden>
+      <div class="chat-offline-title">ALBERT CHAT OFFLINE</div>
+      <div class="chat-offline-body">
+        The chat service is not running on <span class="num">127.0.0.1:4401</span>.<br>
+        Start it with <span class="num">chat\setup.cmd</span> (first time) then
+        <span class="num">chat\start.cmd</span> in the Albert repo.
+      </div>
+      <button id="chatRetry" type="button">RETRY</button>
+    </div>
+  </div>
+</aside>
 
 <div id="tooltip" hidden></div>
 

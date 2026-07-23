@@ -2,6 +2,12 @@
    Chainlit injects its own theme variables at runtime, so these carry !important to win
    the cascade. Unknown variables in a future Chainlit version are ignored harmlessly.
    Cyan #22d3ee = hsl(187 85% 53%). */
+/* No watermark logo on the empty chat screen (message avatars use alt="Avatar for ..."
+   and are unaffected). */
+img[alt="logo"] {
+  display: none !important;
+}
+
 :root,
 .dark,
 [data-theme="dark"] {

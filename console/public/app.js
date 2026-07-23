@@ -3376,7 +3376,7 @@ function wireModal() {
 
 /* ---------------- views / nav ---------------- */
 
-const VIEWS = ['fleet', 'comms', 'graph', 'sessions', 'chat'];
+const VIEWS = ['fleet', 'comms', 'graph', 'sessions'];
 const VIEW_KEY = 'hc.view';
 
 // Remember the last tab so a refresh does not always dump the user back on Graph.
@@ -3393,7 +3393,10 @@ function setView(v) {
   state.view = v;
   try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* storage unavailable */ }
   for (const sec of $$('.view')) sec.classList.toggle('active', sec.id === 'view-' + v);
-  for (const btn of $$('.rail-btn')) btn.classList.toggle('active', btn.dataset.view === v);
+  for (const btn of $$('.rail-btn')) {
+    if (!btn.dataset.view) continue; // #chatBtn's active state tracks the dock, not the view
+    btn.classList.toggle('active', btn.dataset.view === v);
+  }
   if (v === 'fleet') renderFleet();
   else if (v === 'comms') {
     renderComms();
@@ -3409,15 +3412,16 @@ function setView(v) {
       ensureSessionDetail(state.sessionSel).then(renderSessions).catch(() => {});
     }
   } else if (v === 'graph') updateGraph();
-  else if (v === 'chat') ensureChat();
 }
 
-/* ---------------- chat (Albert Chat, embedded) ---------------- */
+/* ---------------- chat dock (fly-up Albert Chat) ---------------- */
 
 // Albert Chat is a separate local service (Chainlit on 4401); this console stays a
 // read-only monitor. The iframe talks to that service directly from the browser, so
-// nothing here writes through the console server. The src is set lazily on first open:
-// the console never touches 4401 unless the tab is used.
+// nothing here writes through the console server. The dock floats over whatever view is
+// active and only toggles CSS classes, never detaching the iframe: the websocket and the
+// conversation survive closing and reopening it. The src is set lazily on first open, so
+// the console never touches 4401 unless the dock is used.
 const CHAT_URL = 'http://127.0.0.1:4401/';
 let chatLoaded = false;
 
@@ -3440,13 +3444,31 @@ function ensureChat() {
     });
 }
 
+function toggleChat(force) {
+  const dock = $('#chatDock');
+  const btn = $('#chatBtn');
+  if (!dock) return;
+  const show = force !== undefined ? force : !dock.classList.contains('open');
+  dock.classList.toggle('open', show);
+  if (btn) {
+    btn.classList.toggle('active', show);
+    btn.setAttribute('aria-expanded', String(show));
+  }
+  if (show) ensureChat();
+}
+
 function wireChat() {
+  const btn = $('#chatBtn');
+  if (btn) btn.addEventListener('click', () => toggleChat());
+  const close = $('#chatClose');
+  if (close) close.addEventListener('click', () => toggleChat(false));
   const retry = $('#chatRetry');
   if (retry) retry.addEventListener('click', ensureChat);
 }
 
 function wireNav() {
   for (const btn of $$('.rail-btn')) {
+    if (!btn.dataset.view) continue; // #chatBtn toggles the dock, not a view
     btn.addEventListener('click', () => setView(btn.dataset.view));
   }
 }
