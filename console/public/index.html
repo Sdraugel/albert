@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>ALBERT CONSOLE</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='%2322d3ee' stroke-width='2'/%3E%3Ccircle cx='12' cy='12' r='3' fill='%2322d3ee'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="wordmark" aria-label="Albert Console">
+    <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="12" y1="1" x2="12" y2="5" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="1" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="19" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="1.2"/>
+      <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+    </svg>
+    ALBERT<span>CONSOLE</span>
+  </div>
+  <div id="liveWrap" role="status" aria-live="polite">
+    <span id="liveDot" class="off" aria-hidden="true"></span>
+    <span id="liveLabel">OFFLINE</span>
+  </div>
+  <div id="runTag" class="num"></div>
+</header>
+
+<nav id="rail" aria-label="Console views">
+  <button class="rail-btn" data-view="fleet" type="button" aria-label="Fleet view">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="7" cy="7" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="17" cy="7" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="7" cy="17" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="17" cy="17" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    </svg>
+    <span class="rail-label">FLEET</span>
+  </button>
+  <button class="rail-btn" data-view="comms" type="button" aria-label="Comms view">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <line x1="4" y1="7" x2="20" y2="7" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="4" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="4" y1="17" x2="18" y2="17" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="20" cy="17" r="1.4" fill="currentColor"/>
+    </svg>
+    <span class="rail-label">COMMS</span>
+  </button>
+  <button class="rail-btn active" data-view="graph" type="button" aria-label="Graph view">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="3 2"/>
+      <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="12" cy="3" r="1.4" fill="currentColor"/>
+      <circle cx="20" cy="15" r="1.4" fill="currentColor"/>
+      <circle cx="4" cy="15" r="1.4" fill="currentColor"/>
+    </svg>
+    <span class="rail-label">GRAPH</span>
+  </button>
+  <button class="rail-btn" data-view="sessions" type="button" aria-label="Sessions view">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <rect x="4" y="10" width="16" height="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <rect x="4" y="16" width="16" height="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    </svg>
+    <span class="rail-label">SESSIONS</span>
+  </button>
+</nav>
+
+<main id="main">
+  <section id="view-fleet" class="view" aria-label="Fleet"></section>
+
+  <section id="view-comms" class="view" aria-label="Comms">
+    <div id="commsChips" role="toolbar" aria-label="Feed filters"></div>
+    <div id="commsFeed" class="panel" aria-live="polite"><i class="c4" aria-hidden="true"></i></div>
+  </section>
+
+  <section id="view-graph" class="view active" aria-label="Graph">
+    <div id="graphWrap" class="panel">
+      <i class="c4" aria-hidden="true"></i>
+      <div class="hud-tab hud-tab-top" aria-hidden="true">Orchestration Layer</div>
+      <div class="hud-tab hud-tab-bottom" aria-hidden="true">Agent Nodes</div>
+      <svg id="graphSvg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Agent orchestration graph"></svg>
+      <div class="corner tl"><div class="corner-label">RUN</div><div class="corner-val num" id="cornerRun">-</div></div>
+      <div class="corner tr"><div class="corner-label">ITERATION</div><div class="corner-val num" id="cornerIter">-</div></div>
+      <div class="corner bl"><div class="corner-label">TOKENS</div><div class="corner-val num" id="cornerTokens">-</div></div>
+      <div class="corner br">
+        <div class="corner-label">TASKS</div>
+        <div class="corner-val num" id="cornerTasks">-</div>
+        <div id="cornerStatus" class="pill p-dim">NO RUN</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-sessions" class="view" aria-label="Sessions">
+    <div class="sess-grid">
+      <div id="sessionsList" class="panel"><i class="c4" aria-hidden="true"></i></div>
+      <div id="sessionsDetail" class="panel"><i class="c4" aria-hidden="true"></i></div>
+    </div>
+  </section>
+</main>
+
+<div id="tooltip" hidden></div>
+
+<div id="modal" hidden>
+  <div class="modal-scrim"></div>
+  <div class="modal-panel panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <i class="c4" aria-hidden="true"></i>
+    <div class="modal-head">
+      <span id="modalTitle" class="num">LOG</span>
+      <button id="modalClose" type="button" aria-label="Close log viewer">CLOSE</button>
+    </div>
+    <pre id="modalPre"></pre>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

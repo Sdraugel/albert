@@ -1,0 +1,35 @@
+# Local credentials and machine-specific config - NEVER commit these
+console/albert-console.local.json
+albert-console.local.json
+*.local.json
+**/.credentials.json
+.env
+.env.*
+
+# Runtime data written by the harness (per-machine, not source)
+harness/runtime/agent-runs/
+**/agent-runs/*/
+!harness/runtime/agent-runs-README.md
+
+# Generated demo output (regenerate with tools/make-demo-data.mjs)
+tools/demo-out/
+**/demo-out/
+
+# Git worktrees the parallel executor creates
+.hx-wt/
+**/.hx-wt/
+
+# Logs and runtime junk
+*.log
+
+# Node (there are no deps, but guard against accidental installs)
+node_modules/
+package-lock.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
