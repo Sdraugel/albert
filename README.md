@@ -6,7 +6,7 @@ critics sign off, while a live high tech HUD shows you every agent as it works.*
 
 ![The Albert Console graph view: a radial arc-reactor with the orchestrator at the core and specialist agents lighting up as they run](assets/graph.png)
 
-This repo is two cooperating pieces:
+This repo is three cooperating pieces:
 
 - **Albert** is a long-running autonomous harness for [Claude Code](https://claude.com/claude-code).
   You give it a goal in plain English. An orchestrator (**A.L.B.E.R.T.**, the Agentic Loop
@@ -18,6 +18,10 @@ This repo is two cooperating pieces:
 - **The Albert Console** is a zero-dependency local dashboard that watches all of the
   above in real time, across every project on your machine, in a cyan-and-gold "agent OS"
   HUD.
+- **Albert Chat** (optional) is a direct line to the orchestrator, right inside the console:
+  a fly-up chat dock where a read-only concierge answers questions about any run in seconds,
+  steering messages queue into the running orchestrator's inbox, and A.L.B.E.R.T.'s replies
+  come back into the conversation. It can also launch new runs for you.
 
 Everything runs locally. The console is read-only and binds to `127.0.0.1` only.
 
@@ -39,6 +43,13 @@ heartbeat.
 iterations, tokens, PRs merged, with drill-in to each run's task list and logs.
 
 ![Sessions view](assets/sessions.png)
+
+**Chat** - a fly-up direct line to A.L.B.E.R.T. on any view. A read-only concierge answers
+run questions from live state in seconds; a "tell Albert to..." message queues in the run's
+inbox, the orchestrator folds it into its next wake, and the reply lands back in the
+conversation (and in the Comms feed).
+
+![Chat dock over the graph view: the user steers task priorities and A.L.B.E.R.T. acknowledges](assets/chat.png)
 
 ---
 
@@ -66,6 +77,18 @@ Then, in any Claude Code session inside a project you want worked on:
 ```
 
 Open the console at **http://localhost:4400** and watch it run.
+
+Optional, to talk to the orchestrator from the console (requires **Python 3.12** via the
+`py` launcher):
+
+```powershell
+cd chat
+.\setup.cmd     # one-time: builds the venv and installs Chainlit + the Claude Agent SDK
+.\start.cmd     # serves the chat on 127.0.0.1:4401
+```
+
+Then hit the **CHAT** button in the console's nav rail. Details and caveats are in
+[chat/README.md](chat/README.md).
 
 To try the UI before you run anything real, boot it against the bundled synthetic demo
 data:
@@ -99,6 +122,13 @@ the claimed result and rejects if uncertain. A task is done only with captured e
 automatically once code-review and QA pass. Deploys, migrations, and other irreversible
 steps stay gated behind an explicit `allow_deploy: true` in the goal, and `stop_after` gives
 you a review checkpoint whenever you want one.
+
+**Talk to it while it runs.** The chat's concierge is a headless Claude Code session with a
+read-only tool surface over the run store, so status questions get answered from real state,
+never from memory. Steering is asynchronous by design: messages queue as files in the run's
+`inbox/`, and the orchestrator drains the inbox at the top of every wake, before even the
+budget guard, so a "stop" always lands. A steer can reprioritize and re-scope, but it can
+never weaken a gate, delete a task, or reverse a critic's rejection.
 
 **Observability without hooks.** The console tails Claude Code's own session transcripts
 plus the harness event stream. There are no hooks in your critical path. A single adapter is
@@ -140,10 +170,13 @@ reads from each run's `goal.md`:
 ## Privacy and security
 
 The console is local-only and read-only, holds no credentials by default, and never
-forwards transcript bodies to the browser. The harness runs autonomous agents that edit
-code and (if you opt in) merge PRs, so run it on repos you can reset and review the goal
-policy first. Full details, including the optional usage strip and the credential handling,
-are in [SECURITY.md](SECURITY.md).
+forwards transcript bodies to the browser. The optional chat is a separate local service on
+`127.0.0.1:4401` that reuses your existing Claude Code login (no API keys stored); the
+console stays read-only, and every chat write travels through the run store on disk, never
+through the console server. The harness runs autonomous agents that edit code and (if you
+opt in) merge PRs, so run it on repos you can reset and review the goal policy first. Full
+details, including the optional usage strip and the credential handling, are in
+[SECURITY.md](SECURITY.md).
 
 ---
 
