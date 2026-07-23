@@ -49,7 +49,8 @@ running out of context, half-finished work, and premature victory.
 ```
 {{CLAUDE_DIR}}\agent-runs\index.json          # {active_run_id, runs:[{id, project_path, status}]}
 {{CLAUDE_DIR}}\agent-runs\<run-id>\            # goal.md, project.json, tasks.json, progress.json,
-                                                        # init.ps1, ledger.csv, events.jsonl, iterations/<n>/...
+                                                        # init.ps1, ledger.csv, events.jsonl, inbox/...,
+                                                        # iterations/<n>/...
 ```
 
 `<run-id>` = `<project>-<slug>-<YYYY-MM-DD>`. Work product is committed into the target project's
@@ -79,6 +80,9 @@ Emit points (actor -> target):
   `checkpoint` (controller -> user) with `--status checkpoint`.
 - TERMINAL: `notify` (controller -> user), then `run.stopped` (controller -> run) with
   `--status <terminal status>`.
+- LOOP step 0: `chat.msg` (user -> controller) and `chat.reply` (controller -> user) are
+  written by `_inbox.mjs` itself (write/reply subcommands), not by `_emit.mjs`; the drain
+  step emits nothing extra.
 
 `--status` also rewrites the run's status in BOTH `index.json` and `progress.json`, so pass it on
 every status transition; never hand-edit one of those files without the other again.
@@ -131,7 +135,24 @@ every status transition; never hand-edit one of those files without the other ag
 
 Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk run concurrently.
 
-1. **Budget guard (first, always).** Read `progress.json`. If `iterations_spent >= max_iterations`
+0. **Inbox drain (before anything else, even the budget guard).** Run
+   `node {{CLAUDE_DIR}}\agent-runs\_inbox.mjs list <run-id>`. An empty or missing inbox is
+   the normal case: skip silently. Otherwise handle each message in order:
+   - `steer`: fold the instruction into this wake. Re-scope or reprioritize (spawn
+     `Task(loop-planner)` if it changes `tasks.json`); if it names a `goal.md` policy field
+     (`allow_deploy`, `stop_after`, `merge_policy`, budget), update `goal.md`. If it asks to
+     stop or pause: reply first, then set `status:"checkpoint"` and go to TERMINAL. A steer
+     NEVER weakens a gate, deletes a task, or reverses a verifier/QA rejection.
+   - `question`: answer from run state only (`progress.json`, `tasks.json`, `git log`, the
+     `events.jsonl` tail); never spawn an agent just to answer.
+   - `info`: note it (into `progress.json` notes if relevant) and acknowledge briefly.
+   Reply to and archive each message in one shot:
+   `node {{CLAUDE_DIR}}\agent-runs\_inbox.mjs reply <run-id> <filename> --text "<answer or ack>"`.
+   Never delete or hand-move inbox files; a message re-appearing next wake means a reply
+   crashed mid-drain, so handle it idempotently. Draining runs before the budget guard so a
+   "stop" or "extend budget" steer is honored even on the wake where the budget trips.
+
+1. **Budget guard (before any work, always).** Read `progress.json`. If `iterations_spent >= max_iterations`
    OR `tokens_spent >= max_tokens` OR now past `wall_deadline`: set `status:"budget_exhausted"`
    and go to TERMINAL.
 2. **Stop check.** If every task is `done && passes` -> `status:"done"`. If research and

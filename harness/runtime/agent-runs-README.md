@@ -15,6 +15,7 @@ committed into that project's own git repo; only the bookkeeping below is global
   - `init.ps1` - idempotent environment bootstrap for this project.
   - `ledger.csv` - research trial ledger (append-only).
   - `events.jsonl` - append-only activity stream, one JSON event per line, written via `_emit.mjs`; the Albert Console tails it.
+  - `inbox/` - pending chat messages to the orchestrator, one JSON file each, written via `_inbox.mjs` (see Chat inbox below); consumed ones move to `inbox/processed/`.
   - `iterations/<n>/` - per-iteration verdict.json plus captured verify stdout and exit codes.
 
 ## Using it
@@ -70,3 +71,26 @@ shell (all forms below verified on this box, Node v26):
   ```
 
 Other arguments containing spaces (typically `<summary>`) only need normal quoting in either shell.
+
+## Chat inbox
+
+Messages from the chat UI queue as one JSON file each under `<run-id>/inbox/`; the loop drains
+them at the top of every wake (LOOP step 0 in the `/albert` skill). All access goes through
+`_inbox.mjs` - never hand-write or hand-move inbox files:
+
+```
+node _inbox.mjs write <run-id> --type steer|question|info --text "<text>" [--from <who>] [--session <chat-session-id>]
+node _inbox.mjs list  <run-id>
+node _inbox.mjs reply <run-id> <filename> --text "<answer>"
+```
+
+- `write` queues `inbox/<epoch_ms>-<pid>-<seq>.json` atomically (tmp + rename, same discipline
+  as `_emit.mjs`) and appends a `chat.msg` event to `events.jsonl`, so the Console Comms feed
+  shows the message. Prints the message id.
+- `list` prints pending messages as a JSON array, oldest first (`[]` when the inbox is empty or
+  missing). Read-only.
+- `reply` appends a `chat.reply` event (full answer in `data.text`, `data.reply_to` linking the
+  message) and then moves the file to `inbox/processed/`. Reply-then-archive in one command is
+  the consume-exactly-once contract: a crash in between re-delivers the message on the next
+  wake, so message handling must stay idempotent.
+- `ALBERT_STORE_ROOT` overrides the store root (used by tests against demo data).

@@ -1,0 +1,15 @@
+/* Albert HUD accents for the Chainlit UI, tuned for the dark theme the console embeds.
+   Chainlit injects its own theme variables at runtime, so these carry !important to win
+   the cascade. Unknown variables in a future Chainlit version are ignored harmlessly.
+   Cyan #22d3ee = hsl(187 85% 53%). */
+:root,
+.dark,
+[data-theme="dark"] {
+  --background: 197 65% 4% !important;
+  --card: 197 60% 6% !important;
+  --popover: 197 60% 6% !important;
+  --primary: 187 85% 53% !important;
+  --primary-foreground: 197 65% 8% !important;
+  --accent: 187 85% 20% !important;
+  --ring: 187 85% 53% !important;
+}

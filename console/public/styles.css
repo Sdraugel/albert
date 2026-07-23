@@ -407,6 +407,37 @@ button {
 #view-comms.active { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 #view-graph.active { display: block; height: 100%; min-height: 0; }
 #view-sessions.active { display: block; height: 100%; min-height: 0; }
+#view-chat.active { display: block; height: 100%; min-height: 0; }
+
+/* ============================ chat (embedded Albert Chat) ============================ */
+
+#chatWrap { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+#chatFrame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+#chatOffline {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  text-align: center;
+  padding: var(--s6);
+}
+#chatOffline[hidden] { display: none; }
+.chat-offline-title { color: var(--cyan-70); letter-spacing: 0.2em; }
+.chat-offline-body { color: var(--cyan-45); line-height: 1.7; }
+#chatRetry {
+  margin-top: var(--s3);
+  padding: var(--s2) var(--s5);
+  color: var(--cyan-70);
+  background: var(--cyan-06);
+  border: 1px solid var(--cyan-25);
+  border-radius: var(--radius);
+  letter-spacing: 0.15em;
+  cursor: pointer;
+}
+#chatRetry:hover { color: var(--gold-hi); border-color: var(--gold-45); background: var(--gold-10); }
 
 /* ============================ FLEET ============================ */
 

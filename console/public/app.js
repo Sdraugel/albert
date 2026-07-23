@@ -3376,7 +3376,7 @@ function wireModal() {
 
 /* ---------------- views / nav ---------------- */
 
-const VIEWS = ['fleet', 'comms', 'graph', 'sessions'];
+const VIEWS = ['fleet', 'comms', 'graph', 'sessions', 'chat'];
 const VIEW_KEY = 'hc.view';
 
 // Remember the last tab so a refresh does not always dump the user back on Graph.
@@ -3409,6 +3409,40 @@ function setView(v) {
       ensureSessionDetail(state.sessionSel).then(renderSessions).catch(() => {});
     }
   } else if (v === 'graph') updateGraph();
+  else if (v === 'chat') ensureChat();
+}
+
+/* ---------------- chat (Albert Chat, embedded) ---------------- */
+
+// Albert Chat is a separate local service (Chainlit on 4401); this console stays a
+// read-only monitor. The iframe talks to that service directly from the browser, so
+// nothing here writes through the console server. The src is set lazily on first open:
+// the console never touches 4401 unless the tab is used.
+const CHAT_URL = 'http://127.0.0.1:4401/';
+let chatLoaded = false;
+
+function ensureChat() {
+  const frame = $('#chatFrame');
+  const offline = $('#chatOffline');
+  if (!frame || !offline || chatLoaded) return;
+  // no-cors probe: an opaque response means the service is up; only a network-level
+  // failure (nothing listening) rejects.
+  fetch(CHAT_URL, { mode: 'no-cors', cache: 'no-store' })
+    .then(() => {
+      chatLoaded = true;
+      frame.src = CHAT_URL;
+      frame.hidden = false;
+      offline.hidden = true;
+    })
+    .catch(() => {
+      frame.hidden = true;
+      offline.hidden = false;
+    });
+}
+
+function wireChat() {
+  const retry = $('#chatRetry');
+  if (retry) retry.addEventListener('click', ensureChat);
 }
 
 function wireNav() {
@@ -3545,6 +3579,7 @@ function tick() {
 async function boot() {
   wireNav();
   wireModal();
+  wireChat();
   applyRoster([]); // synthetic albert until roster arrives, keeps graph core meaningful
   try {
     const [roster, runs] = await Promise.all([

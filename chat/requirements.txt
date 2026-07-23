@@ -1,0 +1,2 @@
+chainlit>=2.11
+claude-agent-sdk>=0.2

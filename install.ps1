@@ -123,8 +123,9 @@ Install-File (Join-Path $repo 'harness\workflows\chunk-exec.js') (Join-Path $Cla
 Ok "workflow: chunk-exec (parallel executor)"
 
 Install-File (Join-Path $repo 'harness\runtime\_emit.mjs')            (Join-Path $ClaudeDir 'agent-runs\_emit.mjs')
+Install-File (Join-Path $repo 'harness\runtime\_inbox.mjs')           (Join-Path $ClaudeDir 'agent-runs\_inbox.mjs')
 Install-File (Join-Path $repo 'harness\runtime\agent-runs-README.md') (Join-Path $ClaudeDir 'agent-runs\README.md')
-Ok "run store: _emit.mjs + README (existing run data left untouched)"
+Ok "run store: _emit.mjs + _inbox.mjs + README (existing run data left untouched)"
 
 # --- Console --------------------------------------------------------------------------------
 if (-not $NoConsole) {
@@ -141,13 +142,11 @@ if (-not $NoConsole) {
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     # A 1-minute repetition is the watchdog: if the console dies, the next tick relaunches it.
     # (Task Scheduler's own restart-on-failure proved unreliable for this.)
-    try {
-      $rep = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-               -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ([TimeSpan]::MaxValue)
-    } catch {
-      $rep = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-               -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
-    }
+    # Bounded 10-year duration on purpose: [TimeSpan]::MaxValue serializes to a Duration value
+    # some Task Scheduler builds reject at REGISTRATION time (not trigger creation), and a
+    # failed Register-ScheduledTask -Force has already removed the existing task by then.
+    $rep = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
+             -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
     $trigger.Repetition = $rep.Repetition
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable `
                   -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
@@ -164,4 +163,5 @@ if (-not $NoConsole) {
 Step "Installed."
 Write-Host "  Run a goal from any project:  " -NoNewline; Write-Host '/albert "<your goal>"' -ForegroundColor White
 if (-not $NoConsole -and -not $NoTask) { Write-Host "  Watch it live:                http://localhost:4400" }
+Write-Host "  Chat UI (optional):           see chat\README.md (requires Python 3.12)"
 Write-Host "  Remove everything:            .\uninstall.ps1`n"
