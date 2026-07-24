@@ -51,6 +51,22 @@ Unregister-ScheduledTask -TaskName AlbertConsole -Confirm:$false   # remove enti
 Killing the node process alone is not enough to stop it for good: the watchdog revives it within
 about a minute. Disable the task first, which is what `stop.cmd` does.
 
+### Fallback when Task Scheduler is unavailable (run-forever.vbs)
+
+Some security policies block scheduled-task creation for non-interactive processes. The fallback
+is `run-forever.vbs`: it launches the server hidden and relaunches it within seconds if it dies
+(after five consecutive fast exits it gives up, so a squatted port cannot make it spin). Point an
+HKCU Run entry at it for start-at-logon:
+
+```powershell
+Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name AlbertConsole `
+  -Value 'wscript.exe "<ConsoleDir>\run-forever.vbs"'
+```
+
+Use one mechanism or the other, not both (the loser of the port race would burn its five
+retries at every logon). `stop.cmd` handles both: it disables the task if present, kills any
+run-forever supervisor, then kills the port owner.
+
 ## Flags
 
 | Flag | Default | Meaning |

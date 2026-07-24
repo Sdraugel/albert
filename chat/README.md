@@ -34,8 +34,18 @@ start.cmd      # serves http://127.0.0.1:4401 and opens the browser (foreground)
 stop.cmd       # kills whatever owns port 4401
 ```
 
-`start.cmd` runs in the foreground: closing that window stops the chat. There is no
-always-on scheduled task for the chat (unlike the console); start it when you want it.
+`start.cmd` runs in the foreground: closing that window stops the chat. For an always-on
+chat (so the console's CHAT dock is always live), point an HKCU Run entry at
+`run-forever.vbs`, which starts the server hidden at logon and relaunches it within
+seconds if it dies:
+
+```powershell
+Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name AlbertChat `
+  -Value 'wscript.exe "<repo>\chat\run-forever.vbs"'
+```
+
+`stop.cmd` kills the supervisor and the server together (a plain port kill is not enough;
+the supervisor would relaunch it).
 
 Resolved versions this was built and tested against: Python 3.12.6, chainlit 2.11.1,
 claude-agent-sdk 0.2.126.
