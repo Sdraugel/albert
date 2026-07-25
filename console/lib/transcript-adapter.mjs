@@ -23,10 +23,17 @@
 //        title    : aiTitle
 //        tool_use : name, id
 //        input    : subagent_type, description (TRUNCATED to 120 chars; a
-//                   model-authored 3-5 word label, the ONLY free text allowed)
+//                   model-authored 3-5 word label, free text allowed only
+//                   through safeLabel); for Workflow dispatches additionally
+//                   input.name (a registered workflow name) and the BASENAME of
+//                   input.scriptPath. input.script and input.args are the
+//                   workflow source and its arbitrary payload: NEVER read.
 //        result   : status, agentId, agentType, resolvedModel, totalDurationMs,
 //                   totalTokens, totalToolUseCount
 //        message  : model, usage token counts (numbers only)
+//        agent meta (parseAgentMeta, the agent-*.meta.json sidecars):
+//                   agentType, model, spawnDepth, description (via safeLabel),
+//                   toolUseId
 //      Tool NAMES may leave. Tool INPUTS may not - not even Bash commands, which
 //      is why the compliance "tests" signal counts Bash calls by name only and
 //      is a documented proxy rather than a real test-run count.
@@ -170,6 +177,21 @@ function parseAssistant(o, rec) {
           // input.prompt is the full task text: NEVER read, NEVER emitted.
         });
       }
+      // A Workflow call fans out to subagents out-of-band, so it IS a dispatch;
+      // without this branch harness sessions look idle while chunk-exec works.
+      // Only input.name (registered workflow name) and the scriptPath BASENAME
+      // may label it. input.script (source) and input.args (arbitrary payload)
+      // are never read.
+      if (toolName === 'Workflow') {
+        const wfName = safeString(block.input?.name);
+        const scriptPath = safeString(block.input?.scriptPath);
+        const scriptBase = scriptPath ? scriptPath.split(/[\\/]/).pop() : null;
+        rec.dispatches.push({
+          toolUseId: safeString(block.id),
+          subagentType: 'workflow',
+          description: safeLabel(wfName || scriptBase || 'inline workflow'),
+        });
+      }
     }
   }
 
@@ -254,6 +276,39 @@ export function parseLine(rawLine) {
     return rec;
   } catch {
     return null; // hard guarantee: parseLine never throws
+  }
+}
+
+/**
+ * Parse an agent-*.meta.json sidecar (the tiny file Claude Code writes next to
+ * each subagent transcript under <sessionId>/subagents/). Named fields only,
+ * same contract as parseLine: agentType and spawnDepth identify the agent,
+ * description is a model-authored short label (truncated), toolUseId joins a
+ * Task/Agent dispatch in the parent transcript (absent for workflow spawns).
+ * The subagent transcript itself is NEVER read for attribution.
+ * Returns null for anything unparseable. NEVER throws.
+ */
+export function parseAgentMeta(raw) {
+  try {
+    if (typeof raw !== 'string') return null;
+    let o;
+    try {
+      o = JSON.parse(stripBom(raw));
+    } catch {
+      return null;
+    }
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+    const agentType = safeString(o.agentType);
+    if (!agentType) return null;
+    return {
+      agentType,
+      model: safeString(o.model),
+      spawnDepth: safeNumber(o.spawnDepth),
+      description: safeLabel(o.description),
+      toolUseId: safeString(o.toolUseId),
+    };
+  } catch {
+    return null;
   }
 }
 

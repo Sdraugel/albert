@@ -4,7 +4,9 @@
 //
 // PRIVACY: this module never sees raw transcript text. Every line goes through
 // transcript-adapter.parseLine first, so only allowlisted fields exist here. Any
-// change that reads a jsonl line without the adapter is a privacy bug.
+// change that reads a jsonl line without the adapter is a privacy bug. Subagent
+// TRANSCRIPTS are never opened at all: attribution reads only the agent-*.meta.json
+// sidecars, through transcript-adapter.parseAgentMeta.
 //
 // EPHEMERALITY: ~/.claude/projects/.last-cleanup proves Claude Code prunes this
 // directory on its own schedule. Transcripts are a LIVE FEED to mirror, never
@@ -18,11 +20,14 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
-import { parseLine, toSurface } from './transcript-adapter.mjs';
+import { parseAgentMeta, parseLine, toSurface } from './transcript-adapter.mjs';
 
 const IDLE_MS = 10 * 60 * 1000;
 const RECENT_MS = 24 * 60 * 60 * 1000;
 const DEBOUNCE_MS = 200;
+// Subagent tree rescans are directory walks with a stat per agent file, so they
+// coalesce on a much longer fuse than the single-file transcript reads above.
+const SUBAGENT_DEBOUNCE_MS = 2000;
 const POLL_MS = 5000;
 const RECONCILE_MS = 60000;
 const MAX_EVENTS = 2000;
@@ -73,10 +78,26 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
   /** log once per distinct problem, never per line */
   const loggedProblems = new Set();
 
+  /**
+   * sessionId -> Map<agent jsonl path (lowercased) -> entry> where entry is
+   * { agentType, model, description, isWorkflow, lastSeenMs }.
+   * Attribution for the agents that never appear in the parent transcript:
+   * workflow-spawned subagents. Built from the tiny agent-*.meta.json sidecars
+   * plus jsonl mtimes; the subagent transcripts themselves are NEVER read, so
+   * this adds no privacy surface and no token double-counting (their usage is
+   * already represented by the parent's dispatch results, where those exist).
+   * Kept OUTSIDE the session state on purpose: a compaction resetDerived wipes
+   * transcript-derived counters, but these files still exist unchanged.
+   */
+  const subagentIndex = new Map();
+  /** sessionId -> slug dir name, for sessions whose subagent tree needs a rescan */
+  const pendingSubagentScans = new Map();
+
   let started = false;
   let backfilling = false;
   let watcher = null;
   let debounceTimer = null;
+  let subagentTimer = null;
   let pollTimer = null;
   let reconcileTimer = null;
   const pendingFiles = new Set();
@@ -259,8 +280,34 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
       },
     ];
 
-    const agents = [];
+    // Transcript-derived agents merged with the subagent-folder overlay. Counts:
+    // transcript dispatches count Task/Agent/Workflow calls; each WORKFLOW-spawned
+    // agent file adds one more (it has no dispatch line anywhere). Task-spawned
+    // agent files only refresh lastSeen - their dispatch line already counted them.
+    const merged = new Map();
     for (const [agentType, a] of state.agents) {
+      merged.set(agentType, {
+        count: a.count,
+        lastSeen: a.lastSeen,
+        lastSeenMs: toMillis(a.lastSeen) || 0,
+        model: a.model,
+      });
+    }
+    const sub = subagentIndex.get(state.sessionId);
+    if (sub) {
+      for (const e of sub.values()) {
+        const m = merged.get(e.agentType) || { count: 0, lastSeen: null, lastSeenMs: 0, model: null };
+        if (e.isWorkflow) m.count += 1;
+        if (e.lastSeenMs > m.lastSeenMs) {
+          m.lastSeenMs = e.lastSeenMs;
+          m.lastSeen = new Date(e.lastSeenMs).toISOString();
+        }
+        if (!m.model && e.model) m.model = e.model;
+        merged.set(e.agentType, m);
+      }
+    }
+    const agents = [];
+    for (const [agentType, a] of merged) {
       agents.push({ agentType, count: a.count, lastSeen: a.lastSeen, model: a.model });
     }
     agents.sort((x, y) => y.count - x.count);
@@ -270,7 +317,7 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
     // tracked structured agent types - no transcript body, prompt, or tool input
     // is consulted, so the privacy allowlist is untouched.
     const harnessAgents = [];
-    for (const agentType of state.agents.keys()) {
+    for (const agentType of merged.keys()) {
       if (typeof agentType === 'string' && agentType.startsWith('loop-')) harnessAgents.push(agentType);
     }
     harnessAgents.sort();
@@ -678,9 +725,197 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
     }
   }
 
+  // ---------------- subagent attribution (meta sidecars only) ----------------
+
+  /**
+   * Subagent activity must bump the parent session's liveness: a harness session
+   * whose orchestrator is quiet while workflow producers grind would otherwise
+   * flip to idle mid-run. Skips the `started` logic in touch() on purpose - an
+   * agent file can never start a session.
+   */
+  function bumpActivity(state, ms) {
+    if (!Number.isFinite(ms) || ms <= state.lastActivityMs) return;
+    state.lastActivityMs = ms;
+    state.lastActivity = new Date(ms).toISOString();
+    state.dirty = true;
+  }
+
+  function sessionSubagents(sessionId) {
+    let m = subagentIndex.get(sessionId);
+    if (!m) {
+      m = new Map();
+      subagentIndex.set(sessionId, m);
+    }
+    return m;
+  }
+
+  /**
+   * Index one agent's meta sidecar. Reads ONLY agent-*.meta.json (tiny,
+   * structured, parsed by the adapter) and stats the sibling jsonl for a
+   * last-seen timestamp. The jsonl itself is never opened.
+   */
+  async function indexAgentMeta(sessionId, metaPath, isWorkflow) {
+    const jsonlPath = metaPath.slice(0, -'.meta.json'.length) + '.jsonl';
+    const key = jsonlPath.toLowerCase();
+    const index = sessionSubagents(sessionId);
+    const known = index.get(key);
+
+    let lastSeenMs = 0;
+    try {
+      lastSeenMs = (await fsp.stat(jsonlPath)).mtimeMs;
+    } catch {
+      try {
+        lastSeenMs = (await fsp.stat(metaPath)).mtimeMs;
+      } catch {
+        return; // both vanished between readdir and stat: pruned, skip
+      }
+    }
+
+    const state = sessions.get(sessionId);
+    if (known) {
+      if (lastSeenMs > known.lastSeenMs) {
+        known.lastSeenMs = lastSeenMs;
+        if (state) {
+          bumpActivity(state, lastSeenMs);
+          refreshStatus(state);
+          flushUpdate(state);
+        }
+      }
+      return;
+    }
+
+    let meta = null;
+    try {
+      meta = parseAgentMeta(await fsp.readFile(metaPath, 'utf8'));
+    } catch {
+      meta = null; // unreadable sidecar: attribution degrades, never crashes
+    }
+    if (!meta) return;
+
+    index.set(key, {
+      agentType: meta.agentType,
+      model: meta.model,
+      description: meta.description,
+      isWorkflow,
+      lastSeenMs,
+    });
+
+    if (state) {
+      bumpActivity(state, lastSeenMs);
+      state.dirty = true;
+      // Only workflow spawns get an event: Task/Agent spawns already produced
+      // agent.dispatched from their transcript dispatch line, and a second event
+      // here would duplicate them in the feed and the TASKS panel.
+      if (isWorkflow) {
+        pushEvent(state, 'agent.dispatched', {
+          ts: new Date(lastSeenMs).toISOString(),
+          actor: 'claude-code',
+          target: meta.agentType,
+          summary: meta.description
+            ? `dispatched ${meta.agentType}: ${meta.description}`
+            : `dispatched ${meta.agentType} (workflow)`,
+          data: { agentType: meta.agentType, description: meta.description, workflow: true },
+        });
+      }
+      refreshStatus(state);
+      flushUpdate(state);
+    }
+  }
+
+  /**
+   * Walk one session's subagents tree:
+   *   <slug>/<sessionId>/subagents/agent-<id>.meta.json               (Task/Agent spawns)
+   *   <slug>/<sessionId>/subagents/workflows/wf_<id>/agent-<id>.meta.json (workflow spawns)
+   * Missing directories are the normal case for sessions that never delegated.
+   */
+  async function scanSubagentTree(slug, sessionId) {
+    const base = path.join(root, slug, sessionId, 'subagents');
+    let entries;
+    try {
+      entries = await fsp.readdir(base, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const f of entries) {
+      if (f.isFile() && f.name.startsWith('agent-') && f.name.endsWith('.meta.json')) {
+        await indexAgentMeta(sessionId, path.join(base, f.name), false);
+      }
+    }
+    const wfBase = path.join(base, 'workflows');
+    let wfDirs;
+    try {
+      wfDirs = await fsp.readdir(wfBase, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const d of wfDirs) {
+      if (!d.isDirectory()) continue;
+      let wfFiles;
+      try {
+        wfFiles = await fsp.readdir(path.join(wfBase, d.name), { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const f of wfFiles) {
+        if (f.isFile() && f.name.startsWith('agent-') && f.name.endsWith('.meta.json')) {
+          await indexAgentMeta(sessionId, path.join(wfBase, d.name, f.name), true);
+        }
+      }
+    }
+  }
+
+  function queueSubagentScan(slug, sessionId) {
+    pendingSubagentScans.set(sessionId, slug);
+    if (subagentTimer) return;
+    subagentTimer = setTimeout(() => {
+      subagentTimer = null;
+      processSubagentScans().catch((e) => problem('subagents', `subagent scan failed: ${e.message}`));
+    }, SUBAGENT_DEBOUNCE_MS);
+    if (typeof subagentTimer.unref === 'function') subagentTimer.unref();
+  }
+
+  async function processSubagentScans() {
+    const batch = [...pendingSubagentScans.entries()];
+    pendingSubagentScans.clear();
+    for (const [sessionId, slug] of batch) {
+      try {
+        await scanSubagentTree(slug, sessionId);
+      } catch (e) {
+        problem(`subagents:${sessionId}`, `subagent scan failed for ${sessionId}: ${e.message}`);
+      }
+    }
+  }
+
+  /**
+   * Fast path for a watch event on a known agent jsonl: refresh its lastSeen
+   * without a directory walk. Unknown files fall back to a debounced tree scan.
+   */
+  function touchSubagentFile(slug, sessionId, absPath) {
+    const name = path.basename(absPath);
+    if (!name.startsWith('agent-')) return;
+    const index = subagentIndex.get(sessionId);
+    const known = index?.get(absPath.toLowerCase());
+    if (known && name.endsWith('.jsonl')) {
+      const now = Date.now();
+      known.lastSeenMs = now;
+      const state = sessions.get(sessionId);
+      if (state) {
+        bumpActivity(state, now);
+        refreshStatus(state);
+        flushUpdate(state);
+      }
+      return;
+    }
+    queueSubagentScan(slug, sessionId);
+  }
+
   // ---------------- scanning ----------------
 
-  /** Top-level <slug>/<sessionId>.jsonl only. subagents/ subtrees are redundant and huge. */
+  /**
+   * Top-level <slug>/<sessionId>.jsonl transcripts. The subagents/ subtrees are
+   * handled separately above via their meta sidecars; the subagent TRANSCRIPTS
+   * stay unread (huge, and their usage is already counted via dispatch results).
+   */
   async function scanFiles() {
     const found = [];
     let dirs;
@@ -716,6 +951,15 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
           await ingestFile(file, { isNew: false });
         } catch (e) {
           problem(`backfill:${file}`, `backfill failed for ${file}: ${e.message}`);
+        }
+      }
+      // Subagent trees AFTER the transcripts, so every pushEvent finds its
+      // session. Meta sidecars only: a few hundred tiny reads, one-time cost.
+      for (const state of sessions.values()) {
+        try {
+          await scanSubagentTree(path.basename(path.dirname(state.file)), state.sessionId);
+        } catch (e) {
+          problem(`backfill-sub:${state.sessionId}`, `subagent backfill failed: ${e.message}`);
         }
       }
     } finally {
@@ -755,10 +999,19 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
         if (!filename) return;
         const rel = filename.toString();
         const parts = rel.split(/[\\/]/).filter(Boolean);
-        // <slug>/<sessionId>.jsonl only: ignore the subagents/ subtree.
-        if (parts.length !== 2) return;
-        if (!parts[1].endsWith('.jsonl')) return;
-        queueFile(path.join(root, rel));
+        // <slug>/<sessionId>.jsonl: the transcript itself.
+        if (parts.length === 2) {
+          if (!parts[1].endsWith('.jsonl')) return;
+          queueFile(path.join(root, rel));
+          return;
+        }
+        // <slug>/<sessionId>/subagents/[workflows/wf_*/]agent-*: attribution
+        // only - known files get a cheap lastSeen touch, new ones a debounced
+        // tree scan. Everything else in the subtree stays ignored.
+        if ((parts.length === 4 || parts.length === 6) && parts[2] === 'subagents') {
+          if (parts.length === 6 && parts[3] !== 'workflows') return;
+          touchSubagentFile(parts[0], parts[1], path.join(root, rel));
+        }
       });
       watcher.on('error', (e) => problem('watch', `watch error on ${root}: ${e.message}`));
     } catch (e) {
@@ -805,6 +1058,13 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
       const known = fileToSession.has(file.toLowerCase());
       if (!known) queueFile(file);
     }
+    // Subagent trees of recently-active sessions, in case watch dropped events.
+    // Bounded: only sessions with activity in the last day, meta+stat only.
+    const now = Date.now();
+    for (const state of sessions.values()) {
+      if (state.missing || now - state.lastActivityMs > RECENT_MS) continue;
+      queueSubagentScan(path.basename(path.dirname(state.file)), state.sessionId);
+    }
   }
 
   return {
@@ -835,10 +1095,12 @@ export function createSessionTailer({ projectsRoot, onEvent, onSessionUpdate, lo
         watcher = null;
       }
       if (debounceTimer) clearTimeout(debounceTimer);
+      if (subagentTimer) clearTimeout(subagentTimer);
       if (pollTimer) clearInterval(pollTimer);
       if (reconcileTimer) clearInterval(reconcileTimer);
-      debounceTimer = pollTimer = reconcileTimer = null;
+      debounceTimer = subagentTimer = pollTimer = reconcileTimer = null;
       pendingFiles.clear();
+      pendingSubagentScans.clear();
     },
 
     getSessions() {
