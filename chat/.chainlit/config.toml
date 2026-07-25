@@ -19,8 +19,12 @@ persist_user_env = false
 # Set to true to show API keys as ***, false to show them as plain text
 mask_user_env = false
 
-# Authorized origins
-allow_origins = ["*"]
+# Authorized origins. NOT "*" (the Chainlit default): this service can queue steering
+# messages and start /albert runs, and its CORS response also sets
+# Access-Control-Allow-Credentials, so a wildcard lets ANY page you happen to be
+# browsing script it cross-origin. Only the chat's own origin is needed - the console
+# embeds it in an iframe, and an iframe's requests carry the iframe's own origin.
+allow_origins = ["http://127.0.0.1:4401", "http://localhost:4401"]
 
 [features]
 # Process and display HTML in messages. This can be a security risk (see https://stackoverflow.com/questions/19603097/why-is-it-dangerous-to-render-user-generated-html-or-javascript)

@@ -7,12 +7,14 @@ Dim sh, fso, here, fails, t0, dt, rc
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 here = fso.GetParentFolderName(WScript.ScriptFullName)
-If Not fso.FileExists(here & "\.venv\Scripts\chainlit.exe") Then WScript.Quit 1 ' run setup.cmd first
+If Not fso.FileExists(here & "\.venv\Scripts\python.exe") Then WScript.Quit 1 ' run setup.cmd first
 sh.CurrentDirectory = here
 fails = 0
 Do
   t0 = Timer
-  rc = sh.Run("""" & here & "\.venv\Scripts\chainlit.exe"" run """ & here & "\app.py"" --host 127.0.0.1 --port 4401 --headless", 0, True)
+  ' server:app, NOT `chainlit run`: server.py adds the Origin guard that stops a
+  ' drive-by page from hijacking the chat's WebSocket. See server.py.
+  rc = sh.Run("""" & here & "\.venv\Scripts\python.exe"" -m uvicorn server:app --host 127.0.0.1 --port 4401", 0, True)
   dt = Timer - t0
   If dt < 0 Then dt = dt + 86400
   If dt < 10 Then

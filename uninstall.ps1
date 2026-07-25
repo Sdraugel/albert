@@ -3,9 +3,13 @@
   Removes the Albert harness and the Albert Console from this machine.
 
 .DESCRIPTION
-  Undoes install.ps1. Stops and unregisters the AlbertConsole scheduled task, frees the
-  console port, deletes the installed console copy, and removes the harness files that this
-  project installed into your Claude Code config.
+  Undoes install.ps1. Stops every always-on mechanism (the AlbertConsole scheduled task,
+  the run-forever.vbs supervisors, and the HKCU Run autostart entries), frees the console
+  and chat ports, deletes the installed console copy, and removes the harness files that
+  this project installed into your Claude Code config.
+
+  Albert Chat lives in the repo you cloned, so its files are left alone; this only stops it
+  and removes its autostart entry.
 
   It does NOT delete your run history (the data folders under <ClaudeDir>\agent-runs\<run-id>),
   and it does NOT remove the six generic helper agents (code-reviewer, security-reviewer,
@@ -20,7 +24,8 @@
 param(
   [string]$ClaudeDir  = (Join-Path $env:USERPROFILE '.claude'),
   [string]$ConsoleDir = (Join-Path $env:LOCALAPPDATA 'AlbertConsole'),
-  [int]$Port          = 4400
+  [int]$Port          = 4400,
+  [int]$ChatPort      = 4401
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,15 +51,40 @@ try {
   }
 } catch { Warn "could not remove scheduled task: $($_.Exception.Message)" }
 
-# Kill whatever still owns the console port (the orphaned node the task leaves behind).
+# HKCU Run entries: the alternative always-on mechanism (used when Task Scheduler is
+# unavailable). Remove BEFORE killing anything, so a supervisor cannot come back at logon.
+foreach ($name in 'AlbertConsole', 'AlbertChat') {
+  try {
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    if ((Get-ItemProperty -Path $runKey -Name $name -ErrorAction SilentlyContinue)) {
+      Remove-ItemProperty -Path $runKey -Name $name -ErrorAction Stop
+      Ok "removed autostart entry $name"
+    }
+  } catch { Warn "could not remove autostart entry $name : $($_.Exception.Message)" }
+}
+
+# run-forever.vbs supervisors relaunch their server seconds after it dies, so they must go
+# before the port owners. Matched on the script name in the wscript command line.
 try {
-  $owners = (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-             Select-Object -ExpandProperty OwningProcess -Unique)
-  foreach ($procId in $owners) {
-    Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
-    Ok "stopped process $procId holding port $Port"
+  $supervisors = Get-CimInstance Win32_Process -Filter "Name = 'wscript.exe'" -ErrorAction SilentlyContinue |
+                 Where-Object { $_.CommandLine -like '*run-forever.vbs*' }
+  foreach ($s in $supervisors) {
+    Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
+    Ok "stopped supervisor process $($s.ProcessId)"
   }
-} catch { Warn "could not free port $Port : $($_.Exception.Message)" }
+} catch { Warn "could not stop supervisors: $($_.Exception.Message)" }
+
+# Kill whatever still owns the console and chat ports (orphans the launchers leave behind).
+foreach ($p in $Port, $ChatPort) {
+  try {
+    $owners = (Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue |
+               Select-Object -ExpandProperty OwningProcess -Unique)
+    foreach ($procId in $owners) {
+      Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+      Ok "stopped process $procId holding port $p"
+    }
+  } catch { Warn "could not free port $p : $($_.Exception.Message)" }
+}
 
 # 2. Console install copy -------------------------------------------------------------------
 if (Test-Path $ConsoleDir) {
@@ -72,7 +102,8 @@ $loopAgents = @(
 $ownedPaths = @(
   (Join-Path $ClaudeDir 'skills\albert'),
   (Join-Path $ClaudeDir 'workflows\chunk-exec.js'),
-  (Join-Path $ClaudeDir 'agent-runs\_emit.mjs')
+  (Join-Path $ClaudeDir 'agent-runs\_emit.mjs'),
+  (Join-Path $ClaudeDir 'agent-runs\_inbox.mjs')
 ) + ($loopAgents | ForEach-Object { Join-Path $ClaudeDir "agents\$_.md" })
 
 foreach ($p in $ownedPaths) {

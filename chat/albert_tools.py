@@ -27,6 +27,22 @@ from config import (
 MSG_TYPES = {"steer", "question", "info"}
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+# Same shape _inbox.mjs enforces. Checked in Python BEFORE any filesystem call,
+# because `Path(store) / "\\\\attacker\\share"` DISCARDS the store and yields the UNC
+# path verbatim: a bare .is_dir() on it makes Windows open an SMB connection and hand
+# the attacker an NTLM handshake. Validating first means a hostile run id never
+# reaches the filesystem at all.
+RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# cmd.exe re-parses the command line when the target resolves to a .cmd/.bat shim,
+# which `claude` on Windows is. Quoting alone does not neutralize these, so they are
+# stripped from the goal before it is ever passed along.
+CMD_METACHARACTERS = re.compile(r'[&|^<>()"\r\n\t%!`$]')
+
+
+def _safe_run_id(run_id: str) -> bool:
+    return bool(run_id) and run_id not in (".", "..") and bool(RUN_ID_RE.match(run_id))
+
 
 @dataclass
 class SessionState:
@@ -80,6 +96,13 @@ def make_albert_server(state: SessionState):
             return _text(f"msg_type must be one of {sorted(MSG_TYPES)}.", is_error=True)
         if not text:
             return _text("text must be non-empty.", is_error=True)
+        # Format check BEFORE touching the filesystem: see RUN_ID_RE.
+        if not _safe_run_id(run_id):
+            return _text(
+                "run_id must be a plain run folder name (letters, digits, dot, dash, "
+                f"underscore), got: {run_id!r}",
+                is_error=True,
+            )
         if not (STORE_ROOT / run_id).is_dir():
             return _text(f"run folder does not exist: {run_id}", is_error=True)
 
@@ -141,6 +164,11 @@ def make_albert_server(state: SessionState):
         if not raw_path or not goal:
             return _text("project_path and goal are both required.", is_error=True)
 
+        # Reject UNC before any filesystem call: resolve()/is_dir() on \\host\share
+        # opens an SMB connection and leaks an NTLM handshake to that host.
+        if raw_path.startswith("\\\\") or raw_path.startswith("//"):
+            return _text("project_path must be a local path, not a UNC share.", is_error=True)
+
         project = Path(raw_path)
         if not project.is_absolute():
             project = PROJECTS_DIR / raw_path
@@ -167,9 +195,13 @@ def make_albert_server(state: SessionState):
                 is_error=True,
             )
 
-        # launch_run.ps1 rejects double quotes outright, so strip them here along with
-        # newlines; the goal must travel as one clean argument.
-        goal = re.sub(r"\s+", " ", goal).replace('"', "'").strip()
+        # The goal ends up on a command line whose target is an npm .cmd shim, so
+        # cmd.exe gets a second crack at parsing it. Collapse whitespace, then drop
+        # every character that shim could act on (see CMD_METACHARACTERS); quoting
+        # alone is not a sufficient defense across that boundary.
+        goal = CMD_METACHARACTERS.sub(" ", re.sub(r"\s+", " ", goal)).strip()
+        if not goal:
+            return _text("goal became empty after removing unsafe characters.", is_error=True)
         prompt = f"/loop /albert {goal}"
         cmd = [
             "powershell",

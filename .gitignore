@@ -15,6 +15,11 @@ harness/runtime/agent-runs/
 tools/demo-out/
 **/demo-out/
 
+# Chainlit scaffolding it writes into whatever directory it starts from. The chat's
+# own chat/.chainlit/config.toml IS tracked; this only ignores a stray copy at the
+# repo root (leading slash = root only).
+/.chainlit/
+
 # Git worktrees the parallel executor creates
 .hx-wt/
 **/.hx-wt/

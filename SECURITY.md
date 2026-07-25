@@ -2,15 +2,19 @@
 
 ## What this software does
 
-Two independent pieces ship in this repo:
+Three independent pieces ship in this repo:
 
 - **The Albert harness** installs into your Claude Code config (`~/.claude`) and runs
   autonomous agents that read and write files in your projects, run shell commands, open
   pull requests, and (if you opt in) merge them.
 - **The Albert Console** is a local, read-only web dashboard that monitors those runs.
+- **Albert Chat** (optional, not installed by default) is a local Chainlit service that
+  lets you question and steer the orchestrator. Unlike the console it can write, though
+  only in two narrow ways: queueing a message into a run's inbox, and launching a new
+  `/albert` run. See "Albert Chat can write" below.
 
-Both are meant to run on your own machine, against your own projects. Read this before an
-unattended run.
+All three are meant to run on your own machine, against your own projects. Read this
+before an unattended run.
 
 ## The console is local and read-only
 
@@ -23,11 +27,38 @@ unattended run.
   boundary. It emits only an allowlist of structured metadata (agent types, counts,
   timings, token totals, run titles). It never forwards prompt text or response bodies to
   the browser. Keep it that way (see CONTRIBUTING.md).
+- Subagent attribution reads only the small `agent-*.meta.json` sidecars next to each
+  subagent transcript, through the same adapter. The subagent transcripts themselves are
+  never opened.
+
+## Albert Chat can write (the console still cannot)
+
+Albert Chat is opt-in: nothing runs until you create its venv and start it yourself. When
+you do:
+
+- It binds `127.0.0.1:4401`, has no authentication, and assumes a single local user, same
+  posture as the console. The console embeds it in an iframe; both stay loopback-only.
+- Its concierge is a headless Claude Code session restricted to read-only tools over the
+  run store, plus exactly two write paths: `send_to_albert` (queue an inbox message for a
+  run) and `start_albert_run` (launch `/albert` in a project directory). Both validate
+  their inputs in code, not just in the prompt: the run must exist and must not be in a
+  terminal state, and the project must be an existing directory under your projects dir.
+- Everything it writes goes to the run store on disk through `harness/runtime/_inbox.mjs`.
+  The console server is not a write path and gains no endpoints.
+- Inbox messages are advisory. The orchestrator folds a steer into its next wake and may
+  re-prioritize or re-scope, but a steer can never weaken a gate, delete a task, or
+  reverse a verifier or QA rejection.
+- Treat the chat as trusted local input. Anyone who can reach port 4401 can queue steering
+  messages and start runs, which is the same trust level as being able to run `/albert`
+  yourself.
 
 ## Credentials
 
 - The harness itself uses whatever Claude Code credentials you already have. This repo
   ships none, and the installer copies none.
+- Albert Chat likewise stores no credentials: its concierge inherits your existing Claude
+  Code login through the Claude Agent SDK. It neither reads nor requires an API key, and
+  no key is written to its config.
 - The console holds no credentials by default. The optional plan-usage strip shells out to
   your local `claude` CLI (`claude auth status --json`) for the plan tier only; it reads no
   token and stores nothing.
