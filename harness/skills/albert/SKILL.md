@@ -172,6 +172,30 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
    stage only and return `awaiting-deploy-approval`. Every dispatch and return emits telemetry, so
    the console graph lights up all concurrent agents. The workflow returns a per-task verdict list.
    See "Parallel chunk execution" below.
+
+   **ALWAYS go through the workflow, including for remediation.** Every task runs via
+   chunk-exec, first attempt and follow-up alike. Do NOT hand-dispatch a producer yourself, and
+   do NOT batch several tasks into one "fix all of these serially" dispatch: that path skips the
+   role-to-producer routing, so a `designer` task silently executes as a generic worker with no
+   screenshots and no design review, and it also skips the gates. If a wave leaves tasks failed
+   or a review files new ones, put those tasks back into a chunk (a follow-up chunk id is fine)
+   and invoke chunk-exec again for that chunk. One dispatch per task, chosen by the task's role,
+   is the contract.
+
+   The workflow returns `role_warnings` when a task's `role` did not resolve to a producer.
+   Treat a non-empty list as a planning defect: correct the role in `tasks.json` (bare noun,
+   see the roster below), or re-run `Task(loop-planner)` for that chunk. Never leave it: the
+   task ran on the generic worker instead of its specialist.
+
+   **Producer roster** (the task's `role` selects exactly one):
+
+   | role | producer | use for |
+   |---|---|---|
+   | `worker` | `loop-worker` | general code, logic, APIs, tests, refactors |
+   | `designer` | `loop-designer` | anything judged by how it LOOKS or READS in a browser: layout, spacing, responsive behavior, styling, theming, empty/loading states, marketing copy, accessibility |
+   | `data-scientist` | `loop-data-scientist` | analysis, models, backtests, statistics |
+   | `researcher` | `loop-researcher` | gathering external information |
+   | `devops` | `loop-devops` | CI, infra, containers, deploy |
 5. **Assemble + record.** Merge each PASSED task's branch into the chunk branch in dependency order
    (serialized; the workflow does this, or resolve a conflict via a `loop-worker` on the updated
    branch). For each task: `done`+`passes:true`+`evidence` on pass, else `attempts++` and `blocked`
@@ -224,6 +248,15 @@ the engine that runs a whole chunk's tasks concurrently. It reads `tasks.json` /
 - **Isolation.** Each task gets its own git worktree off the chunk branch (`harness/<run-id>-<chunk>`),
   so parallel producers never clobber each other's edits. Worktrees are created serially up front and
   torn down at the end.
+- **Role routing.** The task's `role` selects the producer (see the roster in LOOP step 4). The
+  lookup tolerates case, underscores and a stray `loop-` prefix, but an unrecognized role falls
+  back to `loop-worker` and is reported in the return value's `role_warnings` rather than passing
+  silently.
+- **Design tasks are verified visually.** A `designer` task (or any task with a `design` verify
+  kind) requires screenshots at a desktop and a narrow width plus a non-regressing Lighthouse
+  accessibility score, from BOTH the producer and the independent verifier. An empty command list
+  is not a pass for these, and "could not render" is a failure, not a default pass. Design tasks
+  always get a `loop-designer` review gate even if the plan did not request one.
 - **Model tiers + escalation.** Each producer runs on its task's `model` (haiku/sonnet/opus). If the
   independent verify fails, the task retries once on the next tier up before being marked blocked.
 - **Pipeline, no barrier.** Every task flows produce -> verify -> gates -> QA on its own; a fast task
@@ -275,8 +308,11 @@ from one run.
 
 ## Hard rules for the controller
 
-- Stay thin. Never implement a task yourself; spawn the role's producer. Read verdicts and state,
-  not raw file dumps.
+- Stay thin. Never implement a task yourself; spawn the role's producer via chunk-exec, which
+  picks it from the task's `role` (see the roster in LOOP step 4). Never choose the producer
+  yourself, never hand-dispatch, and never batch several tasks into one dispatch: those paths
+  bypass the routing and quietly demote specialist work to the generic worker. Read verdicts and
+  state, not raw file dumps.
 - A task flips to `passes:true` only on captured, independent evidence. No premature victory.
 - Never weaken a gate, delete a task, or reverse a rejection to make progress.
 - Deploys and irreversible actions stop-and-notify unless `goal.md.allow_deploy` is true.

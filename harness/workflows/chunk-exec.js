@@ -29,7 +29,49 @@ const ROLE_AGENT = {
   worker: 'loop-worker', 'data-scientist': 'loop-data-scientist', designer: 'loop-designer',
   researcher: 'loop-researcher', devops: 'loop-devops',
 };
+// Common ways a planner writes a role that are not the canonical bare noun. Measured on the
+// real store: 35 of 74 tasks carried the AGENT name ("loop-worker") instead of the role
+// ("worker"). For worker the two collapsed to the same target by luck, so the mismatch was
+// invisible; for any other role it silently routed the task to the generic worker and the
+// specialist never ran.
+const ROLE_ALIAS = {
+  design: 'designer', ui: 'designer', ux: 'designer', frontend: 'designer', 'front-end': 'designer',
+  'data-science': 'data-scientist', datascientist: 'data-scientist', ds: 'data-scientist',
+  research: 'researcher', infra: 'devops', ops: 'devops', deploy: 'devops',
+  dev: 'worker', engineer: 'worker', code: 'worker',
+};
+
+// Resolve a task's role to a producer agent. Tolerant of case, whitespace, underscores and a
+// leading "loop-", but NEVER silently wrong: unknown roles are reported by roleWarnings below.
+function normalizeRole(role) {
+  const raw = String(role == null ? '' : role).trim().toLowerCase().replace(/_/g, '-');
+  const bare = raw.replace(/^loop-/, '');
+  return ROLE_ALIAS[bare] || bare;
+}
+const roleWarnings = [];
+function agentFor(t) {
+  const canonical = normalizeRole(t && t.role);
+  const mapped = ROLE_AGENT[canonical];
+  if (!mapped) {
+    roleWarnings.push({ task_id: (t && t.id) || '?', role: (t && t.role) || '(missing)', fell_back_to: 'loop-worker' });
+    return 'loop-worker';
+  }
+  return mapped;
+}
+function isDesign(t) {
+  return normalizeRole(t && t.role) === 'designer' || (t && t.kind === 'design');
+}
+
 const GATE_AGENTS = ['code-reviewer', 'security-reviewer', 'performance-reviewer'];
+// A design task's sign-off needs someone who can look at the rendered page. Requested gates
+// that match no agent used to be dropped silently (see signoff), which is how a task asking
+// for "design-system-untouched" shipped with no design review at all.
+const GATE_ALIAS = {
+  'design-system-untouched': 'loop-designer', design: 'loop-designer', 'design-review': 'loop-designer',
+  a11y: 'loop-designer', accessibility: 'loop-designer',
+  security: 'security-reviewer', performance: 'performance-reviewer', perf: 'performance-reviewer',
+  'code-review': 'code-reviewer', review: 'code-reviewer',
+};
 
 // A telemetry line an agent runs so the console graph lights this agent up while it works.
 // Summary is sanitized (no quotes/newlines) so it can never break the generated shell line.
@@ -66,9 +108,12 @@ const plan = (await agent(
 Run dir: ${RUN_DIR}
 1. Read ${RUN_DIR}\\tasks.json (strip a leading BOM before JSON.parse), ${RUN_DIR}\\project.json, ${RUN_DIR}\\goal.md.
 2. Return only the tasks whose "chunk" === "${CHUNK}" and whose status is not already "done".
-   For each: id; role; model (default "sonnet" if absent); description (from "description" or "title");
+   For each: id; role (copy VERBATIM, do not normalize or "correct" it); model (default "sonnet" if
+   absent); description (from "description" or "title");
    depends_on (array, default []); verify_commands (from verify.commands, default []); gates (from
-   verify.gates, default []); expect (from verify.expect); kind (from verify.kind, e.g. "dev" or "research").
+   verify.gates, default []); expect (from verify.expect); kind (from verify.kind, one of "dev",
+   "research" or "design"; pass "design" through unchanged, and if verify has a route/viewports but
+   no commands, treat kind as "design").
 3. git_root and project_path from project.json. base_branch from tasks.json/goal.md. profile from goal.md/tasks.json.
    chunk_branch = "harness/${RUN}-${CHUNK}". allow_deploy from goal.md (default false).
 Return the LOAD schema object exactly.`,
@@ -116,17 +161,25 @@ const VERDICT = {
 const GATE = { type: 'object', required: ['pass'], properties: { pass: { type: 'boolean' }, notes: { type: 'string' } } };
 
 function producePrompt(t, w, model) {
-  return `You are the ${t.role} producer for task ${t.id}, working ONLY inside your git worktree ${w.path} (cd there first; never touch the repo's main worktree). Model tier: ${model}.
+  // Every role-dependent decision below uses the CANONICAL role, never the raw string.
+  // Routing is deliberately tolerant (loop-devops, infra and ops all reach loop-devops), so a
+  // safety check comparing the raw value would let "role":"loop-devops" reach the deploy
+  // specialist with the guardrail silently omitted. Tolerant routing plus a strict check is
+  // exactly how a guardrail goes missing.
+  const role = normalizeRole(t.role);
+  return `You are the ${role} producer for task ${t.id}, working ONLY inside your git worktree ${w.path} (cd there first; never touch the repo's main worktree). Model tier: ${model}.
 Task: ${t.description}
 Implement it, then run its verify commands as your own check: ${(t.verify_commands || []).join(' && ') || '(none given)'}.
 Expect: ${t.expect || 'commands exit 0'}. Commit your work on branch ${w.branch} inside this worktree.
-${t.role === 'devops' && !plan.allow_deploy ? 'DEPLOY GUARDRAIL: allow_deploy is false. Stage only, do NOT deploy/migrate/rotate. Return blocker "awaiting-deploy-approval".' : ''}
-Telemetry: at start run: ${emit('producer.dispatched', 'controller', ROLE_AGENT[t.role] || 'loop-worker', t.id + ': ' + t.description, t.id)}
+${role === 'devops' && !plan.allow_deploy ? 'DEPLOY GUARDRAIL: allow_deploy is false. Stage only, do NOT deploy/migrate/rotate. Return blocker "awaiting-deploy-approval".' : ''}
+${isDesign(t) ? `DESIGN TASK. The evidence is VISUAL, not an exit code. Start the project's dev server, open the affected route, and capture a screenshot at a desktop width and a narrow width. Your work is not done until a screenshot SHOWS the change rendering correctly. Also run a Lighthouse accessibility pass and do not regress the score. Put the screenshot paths and the a11y score in "evidence".${(t.verify_commands || []).length ? '' : ' There are no verify commands for this task, so the screenshots ARE the verification.'}` : ''}
+Telemetry: at start run: ${emit('producer.dispatched', 'controller', agentFor(t), t.id + ': ' + t.description, t.id)}
 Return {passed, commit, blocker, evidence}.`;
 }
 function verifyPrompt(t, w) {
-  return `Independently verify task ${t.id} from a CLEAN state inside worktree ${w.path} (cd there). Trust only your own exit codes.
+  return `Independently verify task ${t.id} from a CLEAN state inside worktree ${w.path} (cd there). Trust only your own evidence.
 Re-run: ${(t.verify_commands || []).join(' && ') || '(none)'}. Expect: ${t.expect || 'exit 0'}.
+${isDesign(t) ? 'This is a DESIGN task, so exit codes are not sufficient and an empty command list is not a pass. Re-take the screenshot yourself at a desktop and a narrow width, confirm it shows what "Expect" describes, and re-run the Lighthouse accessibility check to confirm no regression. If you cannot render the page, that is a FAIL with blocker "could not render", never a pass by default.' : ''}
 Telemetry: at end run: ${emit('verify.result', 'loop-verifier-dev', 'controller', t.id + ' verify', t.id)}
 Return {passed, blocker, evidence}.`;
 }
@@ -147,7 +200,7 @@ async function produceAndVerify(t, w) {
   for (let step = 0; step < 2; step++) {
     const model = TIERS[Math.min(start + step, TIERS.length - 1)];
     const prod = await agent(producePrompt(t, w, model),
-      { label: `produce:${t.id}@${model}`, phase: 'Execute', schema: VERDICT, agentType: ROLE_AGENT[t.role] || 'loop-worker', model });
+      { label: `produce:${t.id}@${model}`, phase: 'Execute', schema: VERDICT, agentType: agentFor(t), model });
     if (prod && prod.blocker === 'awaiting-deploy-approval') return { passed: false, model_used: model, blocker: prod.blocker };
     const ver = await agent(verifyPrompt(t, w),
       { label: `verify:${t.id}`, phase: 'Execute', schema: VERDICT, agentType: 'loop-verifier-dev', effort: 'high' });
@@ -166,11 +219,44 @@ async function signoff(t, w) {
       { label: `skeptic:${t.id}`, phase: 'Execute', schema: GATE, agentType: 'loop-skeptic-research', effort: 'high' });
     return !!(sk && sk.pass);
   }
-  const gates = (t.gates || []).filter((g) => GATE_AGENTS.includes(g));
-  const gateResults = await parallel(gates.map((g) => () =>
-    agent(`Review task ${t.id}'s diff in worktree ${w.path} as ${g}. Telemetry at end: ${emit('gate.result', g, 'controller', t.id + ' ' + g, t.id)}. Return {pass, notes}.`,
-      { label: `gate:${t.id}:${g}`, phase: 'Execute', schema: GATE, agentType: g, effort: 'high' })));
-  const gatesPass = gateResults.length === gates.length && gateResults.every((r) => r && r.pass);
+  // Resolve each requested gate to a reviewer. A gate is one of two things and they must not
+  // be confused: the NAME OF A REVIEWER ("code-reviewer"), or a project-specific ASSERTION
+  // the diff must satisfy ("no-em-en-dashes", "prerender-intact"). Measured on the real store,
+  // assertions are the majority: 23 of 42 requested gates. Both used to be silently dropped
+  // unless they exactly matched an agent name, so a task could ask for a design review, or for
+  // "seo-config-intact", and ship with neither checked. Now an assertion is handed to a
+  // reviewer as an explicit criterion instead of being discarded or failing the task outright.
+  const requested = (t.gates || []).map(String);
+  const resolved = [];
+  const asCriteria = [];
+  for (const g of requested) {
+    const key = g.trim().toLowerCase();
+    const mapped = GATE_AGENTS.includes(key) ? key : GATE_ALIAS[key];
+    if (mapped) resolved.push({ gate: g, agentType: mapped, criterion: null });
+    else {
+      resolved.push({ gate: g, agentType: 'code-reviewer', criterion: g });
+      asCriteria.push(g);
+    }
+  }
+  // A design task always gets a design review, even if the plan forgot to ask for one.
+  if (isDesign(t) && !resolved.some((r) => r.agentType === 'loop-designer')) {
+    resolved.push({ gate: 'design-review', agentType: 'loop-designer', criterion: null });
+  }
+  if (asCriteria.length) {
+    log(`task ${t.id}: gate(s) ${asCriteria.join(', ')} are not reviewer names, checking them as explicit criteria via code-reviewer`);
+  }
+  const gateResults = await parallel(resolved.map((r) => () =>
+    agent(`Review task ${t.id}'s diff in worktree ${w.path} (cd there) for the "${r.gate}" gate.
+${r.criterion
+  ? `"${r.criterion}" is a PROJECT-SPECIFIC CONSTRAINT, not a review speciality. Work out what it requires from the task, the repo's conventions and its CLAUDE.md, then check the diff against exactly that one constraint. Judge only this constraint; other reviewers cover the rest. If you genuinely cannot determine what it means, return pass:false with notes saying so rather than guessing.`
+  : r.agentType === 'loop-designer'
+    ? 'This is a VISUAL review: render the affected page, look at it at a desktop and a narrow width, and judge the RENDERED result, not just the diff. Confirm the project design system, spacing and color scheme were not altered beyond what the task asked for, and that the accessibility score did not regress.'
+    : `Review as ${r.agentType}.`}
+Telemetry at end: ${emit('gate.result', r.agentType, 'controller', t.id + ' ' + r.gate, t.id)}. Return {pass, notes}.`,
+      { label: `gate:${t.id}:${r.gate}`, phase: 'Execute', schema: GATE, agentType: r.agentType, effort: 'high' })));
+  // Every requested gate is now represented in `resolved`, so a dead critic still counts as a
+  // fail (gateResults holds a null) and nothing passes by being unrecognized.
+  const gatesPass = gateResults.length === resolved.length && gateResults.every((r) => r && r.pass);
   const qa = await agent(
     `QA task ${t.id} in worktree ${w.path}: exercise real user journeys and edge cases beyond its narrow verify. Telemetry at end: ${emit('qa.result', 'loop-qa', 'controller', t.id + ' qa', t.id)}. Return {pass, notes}.`,
     { label: `qa:${t.id}`, phase: 'Execute', schema: GATE, agentType: 'loop-qa', effort: 'high' });
@@ -230,7 +316,14 @@ await agent(
   { label: 'cleanup', phase: 'Cleanup', effort: 'low' });
 
 log(`chunk ${CHUNK}: ${results.filter((r) => r.passed).length}/${results.length} passed, ${(merged.merged || []).length} merged`);
-return { chunk: CHUNK, results };
+// A misrouted role is a planning bug that silently costs you a specialist, so say it out loud
+// and hand it back to the controller rather than letting it hide in a green chunk.
+if (roleWarnings.length) {
+  for (const w of roleWarnings) {
+    log(`task ${w.task_id}: unroutable role "${w.role}", fell back to ${w.fell_back_to}. Fix the role in tasks.json (bare noun: worker|designer|data-scientist|researcher|devops).`);
+  }
+}
+return { chunk: CHUNK, results, role_warnings: roleWarnings };
 
 // --- helpers ---
 function topoOrder(list) {
