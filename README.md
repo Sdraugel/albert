@@ -1,5 +1,21 @@
 # Albert
 
+<p align="center">
+  <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/built%20for-Claude%20Code-D97757?logo=claude&logoColor=white" alt="Built for Claude Code"></a>
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="https://github.com/Sdraugel/albert/stargazers"><img src="https://img.shields.io/github/stars/Sdraugel/albert?logo=github&color=1f6feb" alt="Stars"></a>
+  <a href="https://github.com/Sdraugel/albert/commits/main"><img src="https://img.shields.io/github/last-commit/Sdraugel/albert" alt="Last commit"></a>
+  <a href="https://github.com/Sdraugel/albert/issues"><img src="https://img.shields.io/github/issues/Sdraugel/albert" alt="Open issues"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
+  <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/PowerShell-5391FE?logo=powershell&logoColor=white" alt="PowerShell">
+  <img src="https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white" alt="HTML5">
+  <img src="https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white" alt="CSS3">
+</p>
+
 **Give Claude Code a goal and walk away. A roster of specialized agents plans it, splits
 the work, builds it in parallel, reviews and QAs its own output, and merges when the
 critics sign off, while a live high tech HUD shows you every agent as it works.**
