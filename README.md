@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
   <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/PowerShell-5391FE?logo=powershell&logoColor=white" alt="PowerShell">
+  <img src="https://img.shields.io/badge/Bash-4EAA25?logo=gnubash&logoColor=white" alt="Bash">
+  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows-111111?logo=apple&logoColor=white" alt="macOS and Windows">
   <img src="https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white" alt="HTML5">
   <img src="https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white" alt="CSS3">
 </p>
@@ -69,10 +71,13 @@ conversation (and in the Comms feed).
 
 ---
 
-## Quickstart (Windows)
+## Quickstart
 
-Requirements: **Windows 10/11**, **PowerShell 5.1+**, **Node 20+** (Node 26 recommended),
-and **[Claude Code](https://claude.com/claude-code)** already installed and signed in.
+Requirements: **Windows 10/11** or **macOS**, **Node 20+** (Node 26 recommended), and
+**[Claude Code](https://claude.com/claude-code)** already installed and signed in.
+Windows also needs **PowerShell 5.1+**.
+
+**Windows**
 
 ```powershell
 git clone https://github.com/Sdraugel/albert.git
@@ -80,11 +85,21 @@ cd albert
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
+**macOS**
+
+```bash
+git clone https://github.com/Sdraugel/albert.git
+cd albert
+chmod +x install.sh uninstall.sh
+./install.sh
+```
+
 The installer copies the harness (the `/albert` skill, the agent roster, the parallel
 executor, and the event emitter) into your Claude Code config, resolves every machine-path
 template token to your own home directory, and offers to register the console as an
-always-on background task. Nothing personal from the author's machine is shipped or
-installed; the installer generates everything from your environment.
+always-on background service (Windows Scheduled Task, or a macOS LaunchAgent). Nothing
+personal from the author's machine is shipped or installed; the installer generates
+everything from your environment.
 
 Then, in any Claude Code session inside a project you want worked on:
 
@@ -94,13 +109,20 @@ Then, in any Claude Code session inside a project you want worked on:
 
 Open the console at **http://localhost:4400** and watch it run.
 
-Optional, to talk to the orchestrator from the console (requires **Python 3.12** via the
-`py` launcher):
+Optional, to talk to the orchestrator from the console (requires **Python 3.12**):
 
 ```powershell
+# Windows
 cd chat
-.\setup.cmd     # one-time: builds the venv and installs Chainlit + the Claude Agent SDK
-.\start.cmd     # serves the chat on 127.0.0.1:4401
+.\setup.cmd
+.\start.cmd
+```
+
+```bash
+# macOS
+cd chat
+./setup.sh
+./start.sh
 ```
 
 Then hit the **CHAT** button in the console's nav rail. Details and caveats are in
@@ -110,13 +132,25 @@ To try the UI before you run anything real, boot it against the bundled syntheti
 data:
 
 ```powershell
+# Windows
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -DemoOnly
+```
+
+```bash
+# macOS
+./install.sh --demo-only
 ```
 
 To remove everything:
 
 ```powershell
+# Windows
 powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
+```bash
+# macOS
+./uninstall.sh
 ```
 
 ---
