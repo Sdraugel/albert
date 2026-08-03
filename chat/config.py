@@ -1,15 +1,16 @@
 """Shared paths and store helpers for Albert Chat.
 
 Env overrides (all optional, mainly for tests against demo data):
-  ALBERT_STORE_ROOT    run store root (default: %USERPROFILE%\\.claude\\agent-runs)
+  ALBERT_STORE_ROOT    run store root (default: ~/.claude/agent-runs)
   ALBERT_PROJECTS_DIR  where start_albert_run may launch runs (default: parent of this repo,
-                       matching install.ps1's ProjectsDir default)
+                       matching the installer's ProjectsDir default)
   ALBERT_INBOX_MJS     path to _inbox.mjs (default: the installed copy in the store dir,
                        falling back to the repo copy)
 """
 
 import json
 import os
+import sys
 from pathlib import Path
 
 CHAT_DIR = Path(__file__).resolve().parent
@@ -25,7 +26,10 @@ if not INBOX_MJS.exists():
     if _repo_copy.exists():
         INBOX_MJS = _repo_copy
 
-LAUNCH_PS1 = CHAT_DIR / "launch_run.ps1"
+# Windows keeps the PowerShell launcher (npm .cmd shim + Start-Process); macOS/Unix
+# use the bash counterpart that opens Terminal.app / nohup.
+LAUNCH_SCRIPT = CHAT_DIR / ("launch_run.ps1" if sys.platform == "win32" else "launch_run.sh")
+LAUNCH_PS1 = LAUNCH_SCRIPT  # backward-compatible alias
 SYSTEM_PROMPT_PATH = CHAT_DIR / "system_prompt.md"
 
 # A message sent to a run in one of these states would sit in the inbox forever:

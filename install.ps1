@@ -164,4 +164,5 @@ Step "Installed."
 Write-Host "  Run a goal from any project:  " -NoNewline; Write-Host '/albert "<your goal>"' -ForegroundColor White
 if (-not $NoConsole -and -not $NoTask) { Write-Host "  Watch it live:                http://localhost:4400" }
 Write-Host "  Chat UI (optional):           see chat\README.md (requires Python 3.12)"
-Write-Host "  Remove everything:            .\uninstall.ps1`n"
+Write-Host "  Remove everything:            .\uninstall.ps1"
+Write-Host "  macOS users:                  use .\install.sh instead`n"
