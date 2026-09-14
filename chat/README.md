@@ -13,13 +13,15 @@ A Chainlit chat UI for the Albert harness. It gives you a conversation with two 
   seconds.
 
 It can also **start new runs**: the concierge launches `/loop /albert "<goal>"` in a separate
-console window for a project you name. That window is the live orchestrator session and
-survives closing the chat.
+console window (Windows), a Terminal.app window (macOS), or a detached tmux session (other
+POSIX systems; `tmux attach -t <session>` to watch it) for a project you name. That window or
+session is the live orchestrator session and survives closing the chat.
 
 ## Prerequisites
 
 - Windows or macOS, with the Albert harness installed (`install.ps1` or `install.sh` from
-  the repo root; it deploys `_inbox.mjs` into the run store).
+  the repo root; it deploys `_inbox.mjs` into the run store). Linux works too, with `tmux`
+  installed for launching runs.
 - **Python 3.12** (`py -3.12` on Windows, or `python3.12` / Homebrew `python@3.12` on
   macOS). The default `python` may be newer than Chainlit supports; setup builds the venv
   from 3.12 explicitly.
@@ -77,6 +79,13 @@ claude-agent-sdk 0.2.126.
   directory of this repo, same as the installer's default).
 - `ALBERT_INBOX_MJS` - path to `_inbox.mjs` (default: the installed copy in the store;
   falls back to the repo copy).
+- `ALBERT_CHAT_PORT` - the port the chat is served on (default `4401`). It only builds the
+  allowed-origin list; the actual bind port is the `--port` in `start.cmd` / `start.sh`,
+  so change both together.
+- `ALBERT_CHAT_ORIGINS` - comma-separated extra origins the chat answers on when it is
+  fronted by a reverse proxy (for example `https://albert.tail1234.ts.net`). Exact match
+  only; the localhost origins on the chat port are always allowed. Set it on the chat
+  server, not the console.
 
 ## Caveats
 

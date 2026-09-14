@@ -26,8 +26,9 @@ if not INBOX_MJS.exists():
     if _repo_copy.exists():
         INBOX_MJS = _repo_copy
 
-# Windows keeps the PowerShell launcher (npm .cmd shim + Start-Process); macOS/Unix
-# use the bash counterpart that opens Terminal.app / nohup.
+# Windows keeps the PowerShell launcher (npm .cmd shim + Start-Process); macOS uses the
+# bash counterpart that opens Terminal.app. Other POSIX systems launch straight into a
+# tmux session and never run this script (see albert_tools._launch_cmd).
 LAUNCH_SCRIPT = CHAT_DIR / ("launch_run.ps1" if sys.platform == "win32" else "launch_run.sh")
 LAUNCH_PS1 = LAUNCH_SCRIPT  # backward-compatible alias
 SYSTEM_PROMPT_PATH = CHAT_DIR / "system_prompt.md"

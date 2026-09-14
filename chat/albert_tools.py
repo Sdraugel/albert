@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -136,8 +137,10 @@ def _launch_cmd(project: Path, prompt: str) -> tuple[list[str], str]:
     if not claude:
         raise LaunchUnavailable("claude CLI not found on PATH.")
 
-    # Second-resolution suffix so two runs in one project do not collide on the name.
-    session = f"albert-{project.name}-{time.strftime('%H%M%S')}"
+    # tmux rejects '.' and ':' in session names, and the random suffix keeps two launches
+    # in the same project (a retry, two chat sessions) from colliding within one second.
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", project.name)
+    session = f"albert-{safe_name}-{time.strftime('%H%M%S')}-{uuid.uuid4().hex[:4]}"
     return (
         [tmux, "new-session", "-d", "-s", session, "-c", str(project), claude, prompt],
         f"in tmux session {session} (watch it with: tmux attach -t {session})",
@@ -268,11 +271,14 @@ def make_albert_server(state: SessionState):
                 is_error=True,
             )
 
-        # The goal ends up on a command line (Windows npm .cmd shim via cmd.exe, or a
-        # shell on macOS). Collapse whitespace, then drop every character those shells
-        # could act on (see CMD_METACHARACTERS); quoting alone is not a sufficient
-        # defense across that boundary.
-        goal = CMD_METACHARACTERS.sub(" ", re.sub(r"\s+", " ", goal)).strip()
+        # Whitespace is collapsed everywhere so the prompt stays one line. Only Windows
+        # also strips CMD_METACHARACTERS: there the goal crosses cmd.exe via the npm .cmd
+        # shim, which re-parses the command line, and quoting alone does not neutralize
+        # that. The POSIX launchers pass the goal as its own argv word (tmux) or
+        # shell-quote it with printf %q (launch_run.sh), so nothing re-parses it.
+        goal = re.sub(r"\s+", " ", goal).strip()
+        if sys.platform == "win32":
+            goal = CMD_METACHARACTERS.sub(" ", goal).strip()
         if not goal:
             return _text("goal became empty after removing unsafe characters.", is_error=True)
         prompt = f"/loop /albert {goal}"

@@ -5,7 +5,6 @@
 #   bash launch_run.sh --project <dir> --prompt <text>
 #
 # On macOS this opens a new Terminal.app window (mirrors Windows Start-Process).
-# The prompt must not contain double quotes (the caller strips them).
 set -euo pipefail
 
 PROJECT=""
@@ -21,7 +20,6 @@ done
 
 [[ -n "$PROJECT" && -n "$PROMPT" ]] || { echo "usage: $0 --project DIR --prompt TEXT" >&2; exit 1; }
 [[ -d "$PROJECT" ]] || { echo "project directory not found: $PROJECT" >&2; exit 1; }
-[[ "$PROMPT" != *\"* ]] || { echo 'prompt must not contain double quotes' >&2; exit 1; }
 
 if ! command -v claude >/dev/null 2>&1; then
   echo "claude CLI not found on PATH" >&2
