@@ -36,12 +36,19 @@ PORT = os.environ.get("ALBERT_CHAT_PORT", "4401")
 # Only this service's own origins. The console embeds the chat in an iframe, and an
 # iframe's requests carry the IFRAME's origin (this service), not the console's, so
 # the console's port does not belong here.
+#
+# ALBERT_CHAT_ORIGINS (comma-separated) adds the origins this service answers on when it
+# is fronted by a reverse proxy. On a headless Linux box the browser is never on
+# localhost, so the iframe's origin is the proxy's (e.g. a Tailscale Serve HTTPS origin
+# on this same port) and the localhost entries below never match. This still names exact
+# origins, so a drive-by page is rejected exactly as before.
 ALLOWED_ORIGINS = frozenset(
     {
         f"http://127.0.0.1:{PORT}",
         f"http://localhost:{PORT}",
         f"http://[::1]:{PORT}",
     }
+    | {o.strip() for o in os.environ.get("ALBERT_CHAT_ORIGINS", "").split(",") if o.strip()}
 )
 
 

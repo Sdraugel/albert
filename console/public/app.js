@@ -3422,7 +3422,10 @@ function setView(v) {
 // active and only toggles CSS classes, never detaching the iframe: the websocket and the
 // conversation survive closing and reopening it. The src is set lazily on first open, so
 // the console never touches 4401 unless the dock is used.
-const CHAT_URL = 'http://127.0.0.1:4401/';
+// Derived from the console's own origin rather than hardcoded to 127.0.0.1: on a headless
+// box the browser is remote, so localhost would be the VIEWER's machine. The chat sits on
+// the next port up, reached over whatever scheme/host got you to the console.
+const CHAT_URL = `${location.protocol}//${location.hostname}:4401/`;
 let chatLoaded = false;
 
 function ensureChat() {
@@ -3458,6 +3461,8 @@ function toggleChat(force) {
 }
 
 function wireChat() {
+  const pop = $('#chatPop');
+  if (pop) pop.href = CHAT_URL; // same derivation as the iframe, not a hardcoded localhost
   const btn = $('#chatBtn');
   if (btn) btn.addEventListener('click', () => toggleChat());
   const close = $('#chatClose');
