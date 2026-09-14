@@ -16,9 +16,12 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     launchctl unload "${HOME}/Library/LaunchAgents/${LAUNCH_LABEL}.plist" 2>/dev/null || true
     echo "LaunchAgent ${LAUNCH_LABEL} unloaded"
   fi
-elif command -v systemctl >/dev/null 2>&1 && systemctl --user is-active "${UNIT_NAME}.service" >/dev/null 2>&1; then
-  systemctl --user stop "${UNIT_NAME}.service"
-  echo "systemd unit ${UNIT_NAME} stopped. Start again with: systemctl --user start ${UNIT_NAME}"
+elif command -v systemctl >/dev/null 2>&1 && systemctl --user stop "${UNIT_NAME}.service" 2>/dev/null; then
+  # Not gated on is-active: during the Restart=always backoff after a crash the unit is
+  # "activating (auto-restart)", which is-active reports as false, and skipping the stop
+  # would let systemd bring the server straight back. stop on a loaded unit cancels that
+  # pending restart; on a unit that is not loaded it fails and we fall through.
+  echo "systemd unit ${UNIT_NAME} stopped and its auto-restart cancelled. Start again with: systemctl --user start ${UNIT_NAME}"
 fi
 
 pids="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null || true)"
