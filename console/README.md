@@ -9,12 +9,12 @@ A live, Jarvis-style console for the `/albert` harness. It watches the global ru
 ## Run
 
 - **Windows:** double-click `start.cmd` (starts the server and opens the browser), or
-- **macOS:** `./start.sh`, or
-- `node server.mjs` from this directory on either platform.
+- **macOS / Linux:** `./start.sh`, or
+- `node server.mjs` from this directory on any platform.
 
 Note that `start.cmd` / `start.sh` run the server in the foreground: closing that terminal
 stops it. For an always-on instance use the platform service below (Scheduled Task on
-Windows, LaunchAgent on macOS).
+Windows, LaunchAgent on macOS, systemd user unit on Linux).
 
 ## Always on (Windows: AlbertConsole Scheduled Task)
 
@@ -87,6 +87,27 @@ launchctl kickstart -k gui/$(id -u)/com.albert.console
 ```
 
 Unload before killing the port owner: otherwise KeepAlive brings the server back.
+
+## Always on (Linux: systemd user unit)
+
+`install.sh` registers a systemd user unit named `albert-console` that runs
+`node server.mjs` from the installed console directory under
+`~/.local/share/albert-console` (or `$XDG_DATA_HOME/albert-console`), with `Restart=always`
+so a crash self-heals within five seconds. Logs go to `console.stdout.log` /
+`console.stderr.log` next to `server.mjs`. If there is no systemd user session (some
+containers, WSL without systemd), the installer says so and skips this step; use
+`./restart.sh`, which falls back to `nohup`.
+
+```
+./restart.sh       # after changing server.mjs, lib/ or public/
+./stop.sh          # stop the unit, then kill the port owner
+./start.sh         # foreground only (does not touch the unit)
+systemctl --user status albert-console
+journalctl --user -u albert-console -n 50
+```
+
+User units stop when your last session ends unless lingering is on. For a headless box run
+`loginctl enable-linger $USER` once (the installer prints this hint when needed).
 
 ## Flags
 

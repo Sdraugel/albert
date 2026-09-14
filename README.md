@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/PowerShell-5391FE?logo=powershell&logoColor=white" alt="PowerShell">
   <img src="https://img.shields.io/badge/Bash-4EAA25?logo=gnubash&logoColor=white" alt="Bash">
-  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows-111111?logo=apple&logoColor=white" alt="macOS and Windows">
+  <img src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-111111?logo=apple&logoColor=white" alt="macOS, Linux and Windows">
   <img src="https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white" alt="HTML5">
   <img src="https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white" alt="CSS3">
 </p>
@@ -73,7 +73,7 @@ conversation (and in the Comms feed).
 
 ## Quickstart
 
-Requirements: **Windows 10/11** or **macOS**, **Node 20+** (Node 26 recommended), and
+Requirements: **Windows 10/11**, **macOS**, or **Linux**, **Node 20+** (Node 26 recommended), and
 **[Claude Code](https://claude.com/claude-code)** already installed and signed in.
 Windows also needs **PowerShell 5.1+**.
 
@@ -85,7 +85,7 @@ cd albert
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-**macOS**
+**macOS / Linux**
 
 ```bash
 git clone https://github.com/Sdraugel/albert.git
@@ -97,7 +97,8 @@ chmod +x install.sh uninstall.sh
 The installer copies the harness (the `/albert` skill, the agent roster, the parallel
 executor, and the event emitter) into your Claude Code config, resolves every machine-path
 template token to your own home directory, and offers to register the console as an
-always-on background service (Windows Scheduled Task, or a macOS LaunchAgent). Nothing
+always-on background service (Windows Scheduled Task, macOS LaunchAgent, or Linux systemd
+user unit). Nothing
 personal from the author's machine is shipped or installed; the installer generates
 everything from your environment.
 
@@ -119,7 +120,7 @@ cd chat
 ```
 
 ```bash
-# macOS
+# macOS / Linux
 cd chat
 ./setup.sh
 ./start.sh
@@ -137,7 +138,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -DemoOnly
 ```
 
 ```bash
-# macOS
+# macOS / Linux
 ./install.sh --demo-only
 ```
 
@@ -149,7 +150,7 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 ```
 
 ```bash
-# macOS
+# macOS / Linux
 ./uninstall.sh
 ```
 

@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
-# Removes the Albert harness and the Albert Console from this machine.
-# Mirrors uninstall.ps1 for macOS (LaunchAgent instead of Scheduled Task).
+# Removes the Albert harness and the Albert Console from this machine (macOS and Linux).
+# Mirrors uninstall.ps1: LaunchAgent / systemd user unit instead of a Scheduled Task.
 #
 # Usage:
 #   ./uninstall.sh
 #   ./uninstall.sh --claude-dir DIR --console-dir DIR
 set -euo pipefail
 
+OS="$(uname -s)"
 CLAUDE_DIR="${HOME}/.claude"
-CONSOLE_DIR="${HOME}/Library/Application Support/AlbertConsole"
+if [[ "$OS" == "Darwin" ]]; then
+  CONSOLE_DIR="${HOME}/Library/Application Support/AlbertConsole"
+else
+  CONSOLE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/albert-console"
+fi
 PORT=4400
 CHAT_PORT=4401
 LAUNCH_LABEL="com.albert.console"
+UNIT_NAME="albert-console"
 
 info() { printf '  %s\n' "$*"; }
 ok()   { printf '  [ok] %s\n' "$*"; }
@@ -36,15 +42,27 @@ info "ClaudeDir  : $CLAUDE_DIR"
 info "ConsoleDir : $CONSOLE_DIR"
 printf '\n'
 
-# 1. LaunchAgent + port owners -------------------------------------------------------------
-plist_path="${HOME}/Library/LaunchAgents/${LAUNCH_LABEL}.plist"
-if [[ -f "$plist_path" ]] || launchctl print "gui/$(id -u)/${LAUNCH_LABEL}" >/dev/null 2>&1; then
-  launchctl bootout "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || \
-    launchctl unload "$plist_path" 2>/dev/null || true
-  rm -f "$plist_path"
-  ok "unregistered LaunchAgent ${LAUNCH_LABEL}"
+# 1. Always-on service + port owners -------------------------------------------------------
+if [[ "$OS" == "Darwin" ]]; then
+  plist_path="${HOME}/Library/LaunchAgents/${LAUNCH_LABEL}.plist"
+  if [[ -f "$plist_path" ]] || launchctl print "gui/$(id -u)/${LAUNCH_LABEL}" >/dev/null 2>&1; then
+    launchctl bootout "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || \
+      launchctl unload "$plist_path" 2>/dev/null || true
+    rm -f "$plist_path"
+    ok "unregistered LaunchAgent ${LAUNCH_LABEL}"
+  else
+    info "no ${LAUNCH_LABEL} LaunchAgent registered"
+  fi
 else
-  info "no ${LAUNCH_LABEL} LaunchAgent registered"
+  unit_path="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/${UNIT_NAME}.service"
+  if command -v systemctl >/dev/null 2>&1 && { [[ -f "$unit_path" ]] || systemctl --user is-enabled "${UNIT_NAME}.service" >/dev/null 2>&1; }; then
+    systemctl --user disable --now "${UNIT_NAME}.service" 2>/dev/null || true
+    rm -f "$unit_path"
+    systemctl --user daemon-reload 2>/dev/null || true
+    ok "unregistered systemd user unit ${UNIT_NAME}"
+  else
+    info "no ${UNIT_NAME} systemd user unit registered"
+  fi
 fi
 
 # Kill anything still listening on the console/chat ports (orphans after unload).

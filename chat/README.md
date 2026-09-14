@@ -24,7 +24,9 @@ session is the live orchestrator session and survives closing the chat.
   installed for launching runs.
 - **Python 3.12** (`py -3.12` on Windows, or `python3.12` / Homebrew `python@3.12` on
   macOS). The default `python` may be newer than Chainlit supports; setup builds the venv
-  from 3.12 explicitly.
+  from 3.12 explicitly. On Linux without a packaged 3.12, install
+  [uv](https://docs.astral.sh/uv/) and `setup.sh` will use `uv venv --python 3.12`, which
+  downloads one.
 - Node on PATH (the harness already requires it).
 - Claude Code installed and logged in. The concierge inherits that login; no API key is
   needed or read.

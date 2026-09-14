@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Installs the Albert harness and the Albert Console on macOS (and other Unix).
+# Installs the Albert harness and the Albert Console on macOS and Linux.
 # Mirrors install.ps1: same files, same {{TOKEN}} resolution, optional always-on
-# LaunchAgent instead of a Windows Scheduled Task.
+# service (a LaunchAgent on macOS, a systemd user unit on Linux) instead of a
+# Windows Scheduled Task.
 #
 # Usage:
 #   ./install.sh
@@ -12,14 +13,20 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
+OS="$(uname -s)"
 CLAUDE_DIR="${HOME}/.claude"
 PROJECTS_DIR="$(dirname "$REPO")"
-CONSOLE_DIR="${HOME}/Library/Application Support/AlbertConsole"
+if [[ "$OS" == "Darwin" ]]; then
+  CONSOLE_DIR="${HOME}/Library/Application Support/AlbertConsole"
+else
+  CONSOLE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/albert-console"
+fi
 PORT=4400
 DEMO_ONLY=0
 NO_CONSOLE=0
 NO_TASK=0
-LAUNCH_LABEL="com.albert.console"
+LAUNCH_LABEL="com.albert.console"   # macOS LaunchAgent
+UNIT_NAME="albert-console"          # Linux systemd user unit
 
 info() { printf '  %s\n' "$*"; }
 ok()   { printf '  [ok] %s\n' "$*"; }
@@ -38,7 +45,7 @@ while [[ $# -gt 0 ]]; do
     --no-console)   NO_CONSOLE=1; shift ;;
     --no-task)      NO_TASK=1; shift ;;
     -h|--help)
-      sed -n '2,11p' "$0"
+      sed -n '2,12p' "$0"
       exit 0
       ;;
     *) die "unknown argument: $1" ;;
@@ -46,6 +53,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v node >/dev/null 2>&1 || die "Node.js is not on PATH. Install Node 20+ (26 recommended) and re-run."
+
+open_browser() {
+  if command -v open >/dev/null 2>&1; then
+    (sleep 1; open "$1") &
+  elif command -v xdg-open >/dev/null 2>&1; then
+    (sleep 1; xdg-open "$1" >/dev/null 2>&1) &
+  fi
+}
 
 # Resolve {{CLAUDE_DIR}} / {{PROJECTS_DIR}} / {{CONSOLE_DIR}}. On Unix paths use '/', so
 # the JS-escape pass is a no-op unless a path somehow contains a backslash.
@@ -84,9 +99,7 @@ if [[ "$DEMO_ONLY" -eq 1 ]]; then
   node "$REPO/tools/make-demo-data.mjs" "$demo_dir"
   ok "demo data at $demo_dir"
   step "Starting the console at http://localhost:${PORT}  (Ctrl+C to stop)"
-  if command -v open >/dev/null 2>&1; then
-    (sleep 1; open "http://localhost:${PORT}") &
-  fi
+  open_browser "http://localhost:${PORT}"
   exec node "$REPO/console/server.mjs" \
     --port "$PORT" \
     --store "$demo_dir/agent-runs" \
@@ -144,10 +157,11 @@ if [[ "$NO_CONSOLE" -eq 0 ]]; then
 
   if [[ "$NO_TASK" -eq 0 ]]; then
     node_bin="$(command -v node)"
-    plist_dir="${HOME}/Library/LaunchAgents"
-    plist_path="${plist_dir}/${LAUNCH_LABEL}.plist"
-    mkdir -p "$plist_dir"
-    cat > "$plist_path" <<EOF
+    if [[ "$OS" == "Darwin" ]]; then
+      plist_dir="${HOME}/Library/LaunchAgents"
+      plist_path="${plist_dir}/${LAUNCH_LABEL}.plist"
+      mkdir -p "$plist_dir"
+      cat > "$plist_path" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -172,14 +186,45 @@ if [[ "$NO_CONSOLE" -eq 0 ]]; then
 </dict>
 </plist>
 EOF
-    launchctl bootout "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$plist_path"
-    launchctl enable "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || true
-    launchctl kickstart -k "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || \
-      launchctl start "$LAUNCH_LABEL" 2>/dev/null || true
-    ok "registered LaunchAgent '${LAUNCH_LABEL}' -> http://localhost:4400"
+      launchctl bootout "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || true
+      launchctl bootstrap "gui/$(id -u)" "$plist_path"
+      launchctl enable "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || true
+      launchctl kickstart -k "gui/$(id -u)/${LAUNCH_LABEL}" 2>/dev/null || \
+        launchctl start "$LAUNCH_LABEL" 2>/dev/null || true
+      ok "registered LaunchAgent '${LAUNCH_LABEL}' -> http://localhost:4400"
+    elif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+      # Restart=always gives the same self-healing as the Windows watchdog tick.
+      unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+      unit_path="${unit_dir}/${UNIT_NAME}.service"
+      mkdir -p "$unit_dir"
+      cat > "$unit_path" <<EOF
+[Unit]
+Description=Albert Console (http://127.0.0.1:4400)
+After=network.target
+
+[Service]
+ExecStart="${node_bin}" "${CONSOLE_DIR}/server.mjs"
+WorkingDirectory=${CONSOLE_DIR}
+Restart=always
+RestartSec=5
+StandardOutput=append:${CONSOLE_DIR}/console.stdout.log
+StandardError=append:${CONSOLE_DIR}/console.stderr.log
+
+[Install]
+WantedBy=default.target
+EOF
+      systemctl --user daemon-reload
+      systemctl --user enable --now "${UNIT_NAME}.service"
+      ok "registered systemd user unit '${UNIT_NAME}' -> http://localhost:4400"
+      if command -v loginctl >/dev/null 2>&1 && ! loginctl show-user "$(id -un)" 2>/dev/null | grep -q '^Linger=yes'; then
+        info "user services stop at logout on this box; to keep the console up, run: loginctl enable-linger $(id -un)"
+      fi
+    else
+      warn "no launchd or systemd user session here; always-on service not registered."
+      info "Start the console with: ${CONSOLE_DIR}/start.sh  (or ${CONSOLE_DIR}/restart.sh to run it in the background)"
+    fi
   else
-    info "console agent not registered (--no-task). Start it with: ${CONSOLE_DIR}/start.sh"
+    info "console service not registered (--no-task). Start it with: ${CONSOLE_DIR}/start.sh"
   fi
 fi
 

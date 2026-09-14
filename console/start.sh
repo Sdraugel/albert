@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the Albert Console in the foreground and open the browser.
-# Closing this terminal stops the server (use the LaunchAgent for always-on).
+# Closing this terminal stops the server (use the LaunchAgent / systemd unit for always-on).
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 if command -v open >/dev/null 2>&1; then
