@@ -18,15 +18,18 @@ survives closing the chat.
 
 ## Prerequisites
 
-- Windows, with the Albert harness installed (`install.ps1` from the repo root; it deploys
-  `_inbox.mjs` into the run store).
-- **Python 3.12** available as `py -3.12` (the default `python` may be newer than Chainlit
-  supports; setup builds the venv from 3.12 explicitly).
+- Windows or macOS, with the Albert harness installed (`install.ps1` or `install.sh` from
+  the repo root; it deploys `_inbox.mjs` into the run store).
+- **Python 3.12** (`py -3.12` on Windows, or `python3.12` / Homebrew `python@3.12` on
+  macOS). The default `python` may be newer than Chainlit supports; setup builds the venv
+  from 3.12 explicitly.
 - Node on PATH (the harness already requires it).
 - Claude Code installed and logged in. The concierge inherits that login; no API key is
   needed or read.
 
 ## Setup and run
+
+**Windows**
 
 ```
 setup.cmd      # one-time: creates .venv from Python 3.12 and installs requirements
@@ -34,10 +37,19 @@ start.cmd      # serves http://127.0.0.1:4401 and opens the browser (foreground)
 stop.cmd       # kills whatever owns port 4401
 ```
 
-`start.cmd` runs in the foreground: closing that window stops the chat. For an always-on
-chat (so the console's CHAT dock is always live), point an HKCU Run entry at
-`run-forever.vbs`, which starts the server hidden at logon and relaunches it within
-seconds if it dies:
+**macOS**
+
+```
+./setup.sh     # one-time: creates .venv from Python 3.12 and installs requirements
+./start.sh     # serves http://127.0.0.1:4401 and opens the browser (foreground)
+./stop.sh      # kills whatever owns port 4401
+```
+
+`start.cmd` / `start.sh` run in the foreground: closing that window stops the chat.
+
+On Windows, for an always-on chat (so the console's CHAT dock is always live), point an
+HKCU Run entry at `run-forever.vbs`, which starts the server hidden at logon and relaunches
+it within seconds if it dies:
 
 ```powershell
 Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name AlbertChat `
@@ -45,7 +57,7 @@ Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Alb
 ```
 
 `stop.cmd` kills the supervisor and the server together (a plain port kill is not enough;
-the supervisor would relaunch it).
+the supervisor would relaunch it). On macOS, `stop.sh` frees port 4401 directly.
 
 Resolved versions this was built and tested against: Python 3.12.6, chainlit 2.11.1,
 claude-agent-sdk 0.2.126.
@@ -58,9 +70,9 @@ claude-agent-sdk 0.2.126.
 
 ## Configuration (env vars, all optional)
 
-- `ALBERT_STORE_ROOT` - run store root (default `%USERPROFILE%\.claude\agent-runs`). Point it
-  at demo data (`node tools\make-demo-data.mjs <out>` then `<out>\agent-runs`) to try the UI
-  without real runs.
+- `ALBERT_STORE_ROOT` - run store root (default `~/.claude/agent-runs`). Point it at demo
+  data (`node tools/make-demo-data.mjs <out>` then `<out>/agent-runs`) to try the UI without
+  real runs.
 - `ALBERT_PROJECTS_DIR` - where `start_albert_run` may launch runs (default: the parent
   directory of this repo, same as the installer's default).
 - `ALBERT_INBOX_MJS` - path to `_inbox.mjs` (default: the installed copy in the store;

@@ -1,18 +1,22 @@
 # Albert Console
 
-A live, Jarvis-style console for the `/albert` harness. It watches the global run store at `%USERPROFILE%\.claude\agent-runs\` and monitors ALL projects' runs from one place. Zero npm dependencies (Node builtins only), binds to 127.0.0.1 only.
+A live, Jarvis-style console for the `/albert` harness. It watches the global run store at
+`~/.claude/agent-runs/` and monitors ALL projects' runs from one place. Zero npm dependencies
+(Node builtins only), binds to 127.0.0.1 only.
 
 **Strictly read-only over the store.** The server never writes to the run store; it only reads and streams what the harness itself produces.
 
 ## Run
 
-- Double-click `start.cmd` (starts the server and opens the browser), or
-- `node server.mjs` from this directory.
+- **Windows:** double-click `start.cmd` (starts the server and opens the browser), or
+- **macOS:** `./start.sh`, or
+- `node server.mjs` from this directory on either platform.
 
-Note that `start.cmd` runs the server in the foreground: closing that console window stops it. For
-an always-on instance use the Scheduled Task below.
+Note that `start.cmd` / `start.sh` run the server in the foreground: closing that terminal
+stops it. For an always-on instance use the platform service below (Scheduled Task on
+Windows, LaunchAgent on macOS).
 
-## Always on (AlbertConsole Scheduled Task)
+## Always on (Windows: AlbertConsole Scheduled Task)
 
 A Scheduled Task named `AlbertConsole` keeps the server up permanently at
 `http://127.0.0.1:4400`. It runs `run-hidden.vbs`, which launches node with no console window.
@@ -67,13 +71,30 @@ Use one mechanism or the other, not both (the loser of the port race would burn 
 retries at every logon). `stop.cmd` handles both: it disables the task if present, kills any
 run-forever supervisor, then kills the port owner.
 
+## Always on (macOS: LaunchAgent)
+
+`install.sh` registers a LaunchAgent named `com.albert.console` that runs
+`node server.mjs` from the installed console directory under
+`~/Library/Application Support/AlbertConsole`, with `KeepAlive` so a crash self-heals.
+Logs go to `console.stdout.log` / `console.stderr.log` next to `server.mjs`.
+
+```
+./restart.sh       # after changing server.mjs, lib/ or public/
+./stop.sh          # unload the agent, then kill the port owner
+./start.sh         # foreground only (does not re-register the agent)
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.albert.console.plist
+launchctl kickstart -k gui/$(id -u)/com.albert.console
+```
+
+Unload before killing the port owner: otherwise KeepAlive brings the server back.
+
 ## Flags
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--port N` | `4400` | HTTP listen port on 127.0.0.1 |
-| `--store <path>` | `%USERPROFILE%\.claude\agent-runs` | Run store root |
-| `--agents <path>` | `%USERPROFILE%\.claude\agents` | Agent definitions dir (`loop-*.md`) |
+| `--store <path>` | `~/.claude/agent-runs` | Run store root |
+| `--agents <path>` | `~/.claude/agents` | Agent definitions dir (`loop-*.md`) |
 
 ## Views
 
@@ -88,7 +109,7 @@ run-forever supervisor, then kills the port owner.
 
 ## Claude Code session tracking
 
-The console tails Claude Code's own transcripts under `%USERPROFILE%\.claude\projects\` (no hooks,
+The console tails Claude Code's own transcripts under `~/.claude/projects/` (no hooks,
 no config, zero added latency, and retroactive over existing sessions). It backfills at boot then
 tails from stored byte offsets.
 

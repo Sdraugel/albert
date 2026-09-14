@@ -1,14 +1,16 @@
 """Custom tools for the Albert concierge: the only two write paths out of the chat.
 
 Both tools shell out rather than touching the store from Python: send_to_albert goes
-through _inbox.mjs (which owns the NTFS write discipline), and start_albert_run goes
-through launch_run.ps1 (which owns .cmd resolution and detached-window quoting).
+through _inbox.mjs (which owns the store write discipline), and start_albert_run goes
+through launch_run.ps1 (Windows) or launch_run.sh (macOS/Unix), which own detached-window
+quoting and CLI resolution.
 """
 
 import asyncio
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,7 +18,7 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from config import (
     INBOX_MJS,
-    LAUNCH_PS1,
+    LAUNCH_SCRIPT,
     PROJECTS_DIR,
     STORE_ROOT,
     TERMINAL_STATUSES,
@@ -195,26 +197,36 @@ def make_albert_server(state: SessionState):
                 is_error=True,
             )
 
-        # The goal ends up on a command line whose target is an npm .cmd shim, so
-        # cmd.exe gets a second crack at parsing it. Collapse whitespace, then drop
-        # every character that shim could act on (see CMD_METACHARACTERS); quoting
-        # alone is not a sufficient defense across that boundary.
+        # The goal ends up on a command line (Windows npm .cmd shim via cmd.exe, or a
+        # shell on macOS). Collapse whitespace, then drop every character those shells
+        # could act on (see CMD_METACHARACTERS); quoting alone is not a sufficient
+        # defense across that boundary.
         goal = CMD_METACHARACTERS.sub(" ", re.sub(r"\s+", " ", goal)).strip()
         if not goal:
             return _text("goal became empty after removing unsafe characters.", is_error=True)
         prompt = f"/loop /albert {goal}"
-        cmd = [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(LAUNCH_PS1),
-            "-Project",
-            str(project),
-            "-Prompt",
-            prompt,
-        ]
+        if sys.platform == "win32":
+            cmd = [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(LAUNCH_SCRIPT),
+                "-Project",
+                str(project),
+                "-Prompt",
+                prompt,
+            ]
+        else:
+            cmd = [
+                "bash",
+                str(LAUNCH_SCRIPT),
+                "--project",
+                str(project),
+                "--prompt",
+                prompt,
+            ]
         try:
             proc = await asyncio.to_thread(_run, cmd)
         except (OSError, subprocess.TimeoutExpired) as e:
