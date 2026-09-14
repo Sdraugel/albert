@@ -38,11 +38,15 @@ as_escape() {
 }
 
 if [[ "$(uname -s)" == "Darwin" ]] && command -v osascript >/dev/null 2>&1; then
-  proj_q="$(as_escape "$PROJECT")"
-  prompt_q="$(as_escape "$PROMPT")"
+  # Terminal's "do script" re-executes this text as a real shell command line, so
+  # PROJECT/PROMPT must be shell-quoted (printf %q) before they're embedded, not just
+  # AppleScript-escaped -- otherwise $(...), backticks, etc. in either value would run.
+  proj_shq="$(printf '%q' "$PROJECT")"
+  prompt_shq="$(printf '%q' "$PROMPT")"
+  cmd_q="$(as_escape "cd ${proj_shq} && claude ${prompt_shq}")"
   osascript <<EOF
 tell application "Terminal"
-  do script "cd \"${proj_q}\" && claude \"${prompt_q}\""
+  do script "${cmd_q}"
   activate
 end tell
 EOF

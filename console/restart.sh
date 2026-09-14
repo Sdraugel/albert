@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # Restart the Albert Console (use this after changing server.mjs, lib/, or public/).
-# Unloads KeepAlive briefly is unnecessary if we kickstart -k; kill the port owner
-# first so the next bind succeeds, then restart the LaunchAgent (or start.sh fallback).
+# Unload the LaunchAgent before killing the port owner: with KeepAlive=true, killing
+# the managed PID while the agent is still loaded just makes launchd respawn it,
+# racing this script's own kill/restart sequence.
 set -euo pipefail
 
 LAUNCH_LABEL="com.albert.console"
 PORT=4400
 uid="$(id -u)"
 DIR="$(cd "$(dirname "$0")" && pwd)"
+
+plist="${HOME}/Library/LaunchAgents/${LAUNCH_LABEL}.plist"
+if [[ -f "$plist" ]]; then
+  launchctl bootout "gui/${uid}/${LAUNCH_LABEL}" 2>/dev/null || true
+fi
 
 pids="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null || true)"
 if [[ -n "$pids" ]]; then
@@ -24,11 +30,7 @@ else
   echo "nothing listening on $PORT"
 fi
 
-sleep 1
-
-plist="${HOME}/Library/LaunchAgents/${LAUNCH_LABEL}.plist"
 if [[ -f "$plist" ]]; then
-  launchctl bootout "gui/${uid}/${LAUNCH_LABEL}" 2>/dev/null || true
   launchctl bootstrap "gui/${uid}" "$plist"
   launchctl kickstart -k "gui/${uid}/${LAUNCH_LABEL}" 2>/dev/null || \
     launchctl start "$LAUNCH_LABEL" 2>/dev/null || true

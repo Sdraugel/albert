@@ -24,7 +24,7 @@ while [[ $# -gt 0 ]]; do
     --port)        PORT="$2"; shift 2 ;;
     --chat-port)   CHAT_PORT="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,8p' "$0"
+      sed -n '2,7p' "$0"
       exit 0
       ;;
     *) printf 'ERROR: unknown argument: %s\n' "$1" >&2; exit 1 ;;

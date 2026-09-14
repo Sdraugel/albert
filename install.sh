@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     --no-console)   NO_CONSOLE=1; shift ;;
     --no-task)      NO_TASK=1; shift ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,11p' "$0"
       exit 0
       ;;
     *) die "unknown argument: $1" ;;
@@ -139,7 +139,7 @@ if [[ "$NO_CONSOLE" -eq 0 ]]; then
     rel="${f#"$REPO/console/"}"
     install_file "$f" "$CONSOLE_DIR/$rel"
   done < <(find "$REPO/console" -type f -print0)
-  chmod +x "$CONSOLE_DIR/start.sh" "$CONSOLE_DIR/stop.sh" 2>/dev/null || true
+  chmod +x "$CONSOLE_DIR/start.sh" "$CONSOLE_DIR/stop.sh" "$CONSOLE_DIR/restart.sh" 2>/dev/null || true
   ok "console installed at $CONSOLE_DIR"
 
   if [[ "$NO_TASK" -eq 0 ]]; then
