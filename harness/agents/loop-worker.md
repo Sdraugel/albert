@@ -10,13 +10,13 @@ iteration, in a fresh context. Advance that one task and report honestly.
 
 ## Startup ritual (before any work)
 
-Run state lives in `{{CLAUDE_DIR}}\agent-runs\<run-id>\` (the caller gives you `<run-id>`
+Run state lives in `{{CLAUDE_DIR}}/agent-runs/<run-id>/` (the caller gives you `<run-id>`
 and the target `task`).
 
 1. `pwd`, then `cd` to `project.json.project_path`.
 2. Read `progress.json`, `tasks.json`, `goal.md`, `project.json`. Orient from disk, not memory.
 3. `git -C <git_root> log --oneline -5` to see the last committed unit.
-4. Run the run's `init.ps1` (idempotent env bootstrap).
+4. Run the run's bootstrap script, `init.ps1` on Windows or `init.sh` elsewhere (idempotent env bootstrap).
 5. Session smoke test from `project.json` (e.g. build or health check). If it fails, fix the env
    or report a blocker and stop. Never start work on an inherited broken state.
 
@@ -28,7 +28,7 @@ not one-shot it: report `blocker:"too-big"` with a suggested split so the contro
 ## Verify as ground truth
 
 Run the task's `verify.commands`. Capture stdout and the exit code of each into
-`{{CLAUDE_DIR}}\agent-runs\<run-id>\iterations\<n>\<step>.log`. The task counts as done
+`{{CLAUDE_DIR}}/agent-runs/<run-id>/iterations/<n>/<step>.log`. The task counts as done
 only if every command exits 0 and the `expect` condition holds. You do not run the reviewer
 gates or QA yourself; the controller spawns those separately.
 

@@ -14,8 +14,8 @@ export const meta = {
 // Workflow scripts have NO filesystem or shell access, so every disk/git action is done by an
 // agent. This body is pure orchestration plus the dependency-DAG scheduling (plain JS, allowed).
 
-const STORE = '{{CLAUDE_DIR}}\\agent-runs';
-const EMIT = '{{CLAUDE_DIR}}\\agent-runs\\_emit.mjs';
+const STORE = '{{CLAUDE_DIR}}/agent-runs';
+const EMIT = '{{CLAUDE_DIR}}/agent-runs/_emit.mjs';
 // The Workflow tool may hand `args` through as a JSON string rather than a parsed
 // object, so accept either form instead of failing arg validation on the string.
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args;
@@ -23,7 +23,7 @@ const RUN = ARGS && ARGS.run_id;
 const CHUNK = ARGS && ARGS.chunk;
 if (!RUN || !CHUNK) throw new Error('chunk-exec requires args {run_id, chunk}');
 
-const RUN_DIR = STORE + '\\' + RUN;
+const RUN_DIR = STORE + '/' + RUN;
 const TIERS = ['haiku', 'sonnet', 'opus'];
 const ROLE_AGENT = {
   worker: 'loop-worker', 'data-scientist': 'loop-data-scientist', designer: 'loop-designer',
@@ -106,7 +106,7 @@ phase('Load')
 const plan = (await agent(
   `Read the /albert run store and return the chunk's tasks as structured JSON. Do NOT implement anything.
 Run dir: ${RUN_DIR}
-1. Read ${RUN_DIR}\\tasks.json (strip a leading BOM before JSON.parse), ${RUN_DIR}\\project.json, ${RUN_DIR}\\goal.md.
+1. Read ${RUN_DIR}/tasks.json (strip a leading BOM before JSON.parse), ${RUN_DIR}/project.json, ${RUN_DIR}/goal.md.
 2. Return only the tasks whose "chunk" === "${CHUNK}" and whose status is not already "done".
    For each: id; role (copy VERBATIM, do not normalize or "correct" it); model (default "sonnet" if
    absent); description (from "description" or "title");
@@ -142,7 +142,7 @@ const wtPlan = (await agent(
 First ensure the chunk branch exists: from ${GIT}, if branch "${CHUNK_BRANCH}" is missing,
   git branch "${CHUNK_BRANCH}" "${BASE}"  (create the ref without checking it out).
 Then for each task id below, create a worktree on a NEW SIBLING branch off "${CHUNK_BRANCH}":
-  git -C "${GIT}" worktree add "<repo_parent>\\.hx-wt\\${RUN}-${CHUNK}-<id>" -b "${CHUNK_BRANCH}--<id>" "${CHUNK_BRANCH}"
+  git -C "${GIT}" worktree add "<repo_parent>/.hx-wt/${RUN}-${CHUNK}-<id>" -b "${CHUNK_BRANCH}--<id>" "${CHUNK_BRANCH}"
 where <repo_parent> is the folder CONTAINING the repo, so ".hx-wt" is a sibling of the repo and never nests inside it.
 If a branch "${CHUNK_BRANCH}--<id>" already exists from a prior run, delete it first (git branch -D) then re-add.
 Task ids: ${tasks.map((t) => t.id).join(', ')}.
@@ -312,7 +312,7 @@ for (const r of results) r.merged = !!(r.branch && mergedSet.has(r.branch));
 phase('Cleanup')
 // Always runs (even if nothing merged), so leftover worktrees and task branches never break a retry.
 await agent(
-  `Clean up this chunk's scratch git state in ${GIT}. 1) Remove every worktree whose path contains ".hx-wt\\${RUN}-${CHUNK}-": from 'git -C "${GIT}" worktree list', for each match run git -C "${GIT}" worktree remove --force <path>; then git -C "${GIT}" worktree prune. 2) Delete every task branch matching "${CHUNK_BRANCH}--*": git -C "${GIT}" branch -D <branch> (they are either merged into ${CHUNK_BRANCH} already or are discarded failed attempts). Do NOT delete "${CHUNK_BRANCH}" itself. Return a one-line summary.`,
+  `Clean up this chunk's scratch git state in ${GIT}. 1) Remove every worktree whose path contains ".hx-wt/${RUN}-${CHUNK}-" (git prints worktree paths with forward slashes on every platform): from 'git -C "${GIT}" worktree list', for each match run git -C "${GIT}" worktree remove --force <path>; then git -C "${GIT}" worktree prune. 2) Delete every task branch matching "${CHUNK_BRANCH}--*": git -C "${GIT}" branch -D <branch> (they are either merged into ${CHUNK_BRANCH} already or are discarded failed attempts). Do NOT delete "${CHUNK_BRANCH}" itself. Return a one-line summary.`,
   { label: 'cleanup', phase: 'Cleanup', effort: 'low' });
 
 log(`chunk ${CHUNK}: ${results.filter((r) => r.passed).length}/${results.length} passed, ${(merged.merged || []).length} merged`);

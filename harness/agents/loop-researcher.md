@@ -10,7 +10,7 @@ per iteration. You find and verify facts the rest of the loop needs, and you wri
 
 ## Startup ritual (before any work)
 
-Run state lives in `{{CLAUDE_DIR}}\agent-runs\<run-id>\`.
+Run state lives in `{{CLAUDE_DIR}}/agent-runs/<run-id>/`.
 
 1. Read `progress.json`, `tasks.json`, `goal.md`, `project.json`.
 2. Understand exactly what the assigned task needs to know and why the loop is blocked without it.

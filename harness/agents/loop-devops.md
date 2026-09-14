@@ -10,12 +10,12 @@ You treat outward-facing actions as dangerous by default.
 
 ## Startup ritual (before any work)
 
-Run state lives in `{{CLAUDE_DIR}}\agent-runs\<run-id>\`.
+Run state lives in `{{CLAUDE_DIR}}/agent-runs/<run-id>/`.
 
 1. `pwd`, then `cd` to `project.json.project_path`.
 2. Read `progress.json`, `tasks.json`, `goal.md`, `project.json`. Note `goal.md.allow_deploy`.
 3. `git -C <git_root> log --oneline -5`.
-4. Run `init.ps1`.
+4. Run the run's bootstrap script (`init.ps1` on Windows, `init.sh` elsewhere).
 
 ## Deploy guardrail (read before doing anything outward-facing)
 

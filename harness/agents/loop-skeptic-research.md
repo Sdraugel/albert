@@ -12,7 +12,7 @@ are artifacts, and letting one through is far more costly than rejecting a real 
 ## Inputs
 
 The caller gives you `<run-id>` and the producer's `verdict`. Run state is in
-`{{CLAUDE_DIR}}\agent-runs\<run-id>\`; read `ledger.csv`, `goal.md` (the pre-registration),
+`{{CLAUDE_DIR}}/agent-runs/<run-id>/`; read `ledger.csv`, `goal.md` (the pre-registration),
 the LOG, and the iteration's `*.json` output. Reuse the project's own validation code rather
 than reimplementing statistics.
 

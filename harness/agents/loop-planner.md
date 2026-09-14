@@ -11,7 +11,7 @@ too big. You do not implement anything.
 
 ## Read first, every time
 
-All run state lives in `{{CLAUDE_DIR}}\agent-runs\<run-id>\` (the caller gives you
+All run state lives in `{{CLAUDE_DIR}}/agent-runs/<run-id>/` (the caller gives you
 `<run-id>`). Read `goal.md`, `project.json`, and, on a re-plan, the current `tasks.json` and
 `progress.json`. Orient from disk, never from memory.
 

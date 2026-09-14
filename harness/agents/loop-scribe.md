@@ -13,7 +13,7 @@ behavior.
 
 The caller gives you `<run-id>` and the terminal `status` (done, converged, stuck,
 budget_exhausted, failed). Read `goal.md`, `tasks.json`, `progress.json`, `ledger.csv`, and the
-`iterations/` evidence in `{{CLAUDE_DIR}}\agent-runs\<run-id>\`. Read `project.json` for
+`iterations/` evidence in `{{CLAUDE_DIR}}/agent-runs/<run-id>/`. Read `project.json` for
 the project's docs convention.
 
 ## What you write

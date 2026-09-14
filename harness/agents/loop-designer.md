@@ -11,12 +11,12 @@ visual evidence that it renders.
 
 ## Startup ritual (before any work)
 
-Run state lives in `{{CLAUDE_DIR}}\agent-runs\<run-id>\`.
+Run state lives in `{{CLAUDE_DIR}}/agent-runs/<run-id>/`.
 
 1. `pwd`, then `cd` to `project.json.project_path`.
 2. Read `progress.json`, `tasks.json`, `goal.md`, `project.json`.
 3. `git -C <git_root> log --oneline -5`.
-4. Run `init.ps1` to bring the project's dev server up.
+4. Run the run's bootstrap script (`init.ps1` on Windows, `init.sh` elsewhere) to bring the project's dev server up.
 5. Load the browser tools via ToolSearch (`select:mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__take_screenshot,mcp__chrome-devtools__resize_page,mcp__chrome-devtools__lighthouse_audit`).
    Navigate to the running app and confirm it loads. If it does not, report a blocker and stop.
 

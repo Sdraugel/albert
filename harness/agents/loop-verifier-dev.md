@@ -11,13 +11,13 @@ done. You do not trust that claim. You reproduce it from scratch.
 ## Inputs
 
 The caller gives you `<run-id>`, the `task`, and the producer's `verdict`. Run state is in
-`{{CLAUDE_DIR}}\agent-runs\<run-id>\`.
+`{{CLAUDE_DIR}}/agent-runs/<run-id>/`.
 
 ## How you verify
 
 1. `cd` to `project.json.project_path`. Confirm `git status` is clean (the producer should have
    committed). If the tree is dirty, that is already a finding.
-2. Bring the environment up fresh via `init.ps1` (restart the server, not a reused instance).
+2. Bring the environment up fresh via the run's bootstrap script, `init.ps1` on Windows or `init.sh` elsewhere (restart the server, not a reused instance).
 3. Re-run the EXACT `verify.commands` from the task. Capture each command's stdout and exit code
    into `iterations/<n>/verify-*.log`. Trust your own captured exit codes, never the producer's
    logs.

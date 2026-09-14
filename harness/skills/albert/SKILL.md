@@ -47,9 +47,9 @@ running out of context, half-finished work, and premature victory.
 ## Run store (global, never committed)
 
 ```
-{{CLAUDE_DIR}}\agent-runs\index.json          # {active_run_id, runs:[{id, project_path, status}]}
-{{CLAUDE_DIR}}\agent-runs\<run-id>\            # goal.md, project.json, tasks.json, progress.json,
-                                                        # init.ps1, ledger.csv, events.jsonl, inbox/...,
+{{CLAUDE_DIR}}/agent-runs/index.json          # {active_run_id, runs:[{id, project_path, status}]}
+{{CLAUDE_DIR}}/agent-runs/<run-id>/            # goal.md, project.json, tasks.json, progress.json,
+                                                        # init.ps1 or init.sh, ledger.csv, events.jsonl, inbox/...,
                                                         # iterations/<n>/...
 ```
 
@@ -63,7 +63,7 @@ emit at each moment listed below; it is fire-and-forget telemetry: one command, 
 loop, and if it fails you note it once and continue (never retry-loop on telemetry).
 
 ```
-node {{CLAUDE_DIR}}\agent-runs\_emit.mjs <run-id> <type> <actor> <target> "<summary>" [--task <id>] [--iter <n>] [--chunk <id>] [--status <run-status>]
+node {{CLAUDE_DIR}}/agent-runs/_emit.mjs <run-id> <type> <actor> <target> "<summary>" [--task <id>] [--iter <n>] [--chunk <id>] [--status <run-status>]
 ```
 
 Emit points (actor -> target):
@@ -123,8 +123,9 @@ every status transition; never hand-edit one of those files without the other ag
 5. Spawn `Task(loop-planner)` to decompose the goal into `tasks.json` (roles + per-task verify,
    all `passes:false`). For a research goal, have the planner write the pre-registration (nulls,
    holdout, stopping rule) into the LOG before any out-of-sample run.
-6. Write `init.ps1` (idempotent env bootstrap for this project) and `progress.json`
-   (`iteration:0`, budget, `status:"running"`). Register the run in `index.json`.
+6. Write the bootstrap script, `init.ps1` on Windows or `init.sh` on macOS/Linux (idempotent
+   env bootstrap for this project; agents run whichever one exists in the run dir), and
+   `progress.json` (`iteration:0`, budget, `status:"running"`). Register the run in `index.json`.
 7. Git-flow: if `base_branch` is set (or the repo uses a develop/main workflow), create the run
    branch off it: `git -C <git_root> checkout -b harness/<run-id> <base_branch>`. All work lands
    on this branch, never directly on `base_branch`. Then the first commit: `harness: scaffold
@@ -136,7 +137,7 @@ every status transition; never hand-edit one of those files without the other ag
 Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk run concurrently.
 
 0. **Inbox drain (before anything else, even the budget guard).** Run
-   `node {{CLAUDE_DIR}}\agent-runs\_inbox.mjs list <run-id>`. An empty or missing inbox is
+   `node {{CLAUDE_DIR}}/agent-runs/_inbox.mjs list <run-id>`. An empty or missing inbox is
    the normal case: skip silently. Otherwise handle each message in order:
    - `steer`: fold the instruction into this wake. Re-scope or reprioritize (spawn
      `Task(loop-planner)` if it changes `tasks.json`); if it names a `goal.md` policy field
@@ -147,7 +148,7 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
      `events.jsonl` tail); never spawn an agent just to answer.
    - `info`: note it (into `progress.json` notes if relevant) and acknowledge briefly.
    Reply to and archive each message in one shot:
-   `node {{CLAUDE_DIR}}\agent-runs\_inbox.mjs reply <run-id> <filename> --text "<answer or ack>"`.
+   `node {{CLAUDE_DIR}}/agent-runs/_inbox.mjs reply <run-id> <filename> --text "<answer or ack>"`.
    Never delete or hand-move inbox files; a message re-appearing next wake means a reply
    crashed mid-drain, so handle it idempotently. Draining runs before the budget guard so a
    "stop" or "extend budget" steer is honored even on the wake where the budget trips.
@@ -163,7 +164,7 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
    `git -C <git_root> checkout -b harness/<run-id>-<chunk> <base_branch>` (create once). If any task
    in the chunk looks far too big, `Task(loop-planner)` to re-decompose the chunk, persist, re-pick.
 4. **Fan out the chunk in parallel (chunk-exec workflow).**
-   `Workflow({scriptPath:"{{CLAUDE_DIR}}\workflows\chunk-exec.js", args:{run_id, chunk}})`.
+   `Workflow({scriptPath:"{{CLAUDE_DIR}}/workflows/chunk-exec.js", args:{run_id, chunk}})`.
    It runs every task in the chunk concurrently, respecting intra-chunk
    `depends_on`: each task gets its own git worktree off the chunk branch, its producer runs on the
    task's `model` tier, then the task pipelines through verify -> gates -> QA independently and
@@ -242,7 +243,7 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
 
 ## Parallel chunk execution (chunk-exec workflow)
 
-`Workflow({scriptPath:"{{CLAUDE_DIR}}\workflows\chunk-exec.js", args:{run_id, chunk}})` is
+`Workflow({scriptPath:"{{CLAUDE_DIR}}/workflows/chunk-exec.js", args:{run_id, chunk}})` is
 the engine that runs a whole chunk's tasks concurrently. It reads `tasks.json` / `project.json` / `goal.md` from the run store and:
 
 - **Isolation.** Each task gets its own git worktree off the chunk branch (`harness/<run-id>-<chunk>`),

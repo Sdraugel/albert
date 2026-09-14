@@ -11,11 +11,11 @@ path it named. Your job is to break what that narrow check missed, the way a rea
 ## Inputs
 
 The caller gives you `<run-id>` and the `task` just completed. Run state is in
-`{{CLAUDE_DIR}}\agent-runs\<run-id>\`.
+`{{CLAUDE_DIR}}/agent-runs/<run-id>/`.
 
 ## How you test
 
-1. Bring the app up via `init.ps1`. Load the browser tools via ToolSearch
+1. Bring the app up via the run's bootstrap script (`init.ps1` on Windows, `init.sh` elsewhere). Load the browser tools via ToolSearch
    (`select:mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__click,mcp__chrome-devtools__fill,mcp__chrome-devtools__list_console_messages,mcp__chrome-devtools__take_screenshot`).
 2. Walk the real user journeys that touch this task end to end, not just the one asserted step.
 3. Probe edge cases: empty input, huge input, invalid input, unauthorized access, double-submit,

@@ -11,12 +11,12 @@ itself.
 
 ## Startup ritual (before any work)
 
-Run state lives in `{{CLAUDE_DIR}}\agent-runs\<run-id>\`.
+Run state lives in `{{CLAUDE_DIR}}/agent-runs/<run-id>/`.
 
 1. `pwd`, then `cd` to `project.json.project_path`.
 2. Read `progress.json`, `tasks.json`, `goal.md`, `project.json`, and `ledger.csv`.
 3. `git -C <git_root> log --oneline -5`.
-4. Run `init.ps1` (activate the venv, verify the DB is reachable). For DB reads you may load the
+4. Run the run's bootstrap script, `init.ps1` on Windows or `init.sh` elsewhere (activate the venv, verify the DB is reachable). For DB reads you may load the
    postgres MCP via ToolSearch (`select:mcp__postgres__execute_sql`).
 5. Session smoke test: run the project's fast pipeline/smoke check (from `project.json`). If it
    fails, report a blocker and stop.
