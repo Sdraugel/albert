@@ -26,23 +26,24 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 1
 fi
 
-# Escape for embedding inside an AppleScript double-quoted string.
+# Escape for an AppleScript double-quoted string literal. Only the temp script path
+# goes through here; user data never touches the AppleScript source. sed rather than
+# bash pattern substitution because macOS's stock bash 3.2 does not double a
+# backslash with "${s//\\/\\\\}" the way bash 4.3+ does.
 as_escape() {
-  # backslash, then double-quote
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  printf '%s' "$s"
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
 if [[ "$(uname -s)" == "Darwin" ]] && command -v osascript >/dev/null 2>&1; then
-  # Terminal's "do script" re-executes this text as a real shell command line, so
-  # PROJECT/PROMPT must be shell-quoted (printf %q) before they're embedded, not just
-  # AppleScript-escaped -- otherwise $(...), backticks, etc. in either value would run.
-  proj_shq="$(printf '%q' "$PROJECT")"
-  prompt_shq="$(printf '%q' "$PROMPT")"
-  cmd_q="$(as_escape "cd ${proj_shq} && claude ${prompt_shq}")"
-  osascript <<EOF
+  # Terminal's "do script" hands its text to the user's login shell (zsh on modern
+  # macOS) to re-parse, so the project and prompt are never embedded in it. They go
+  # into a throwaway bash script, printf %q-quoted for bash to read back, and the
+  # only thing Terminal sees is "bash <that path>". The script deletes itself.
+  claude_bin="$(command -v claude)"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/albert-launch.XXXXXX")"
+  printf '#!/bin/bash\nrm -f -- "$0"\ncd %q && exec %q %q\n' "$PROJECT" "$claude_bin" "$PROMPT" > "$tmp"
+  cmd_q="$(as_escape "bash $(printf '%q' "$tmp")")"
+  osascript <<EOF || { rm -f "$tmp"; exit 1; }
 tell application "Terminal"
   do script "${cmd_q}"
   activate
