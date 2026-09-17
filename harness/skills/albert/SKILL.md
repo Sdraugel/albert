@@ -18,6 +18,7 @@ allowed-tools:
   - Monitor
   - TaskStop
   - ToolSearch
+  - Workflow
 ---
 
 You are the controller for a long-running agent harness modeled on Anthropic's
@@ -49,7 +50,8 @@ running out of context, half-finished work, and premature victory.
    sleeps the loop pauses; state is safe on disk and resumes on the next wake.
 4. **Nothing waits forever.** Every agent chunk-exec spawns runs under a deadline, and a step
    that times out is a FAIL. The controller mirrors that: a chunk still in flight after
-   `goal.md.chunk_timeout_minutes` (default 240) is stopped and its tasks retried (LOOP step 4).
+   `goal.md.chunk_timeout_minutes` (default 480, above the summed ceilings of one escalated
+   design task) is stopped and its tasks retried (LOOP step 3).
    A box that sleeps through a deadline trips it on wake (one QA step "took" 8 hours that way),
    and the step is retried rather than trusted, so keeping the machine awake is what saves the
    retry, not what makes the run safe.
@@ -126,7 +128,7 @@ every status transition; never hand-edit one of those files without the other ag
    (anti-self-deception gates). `--profile` overrides.
 4. Write `goal.md` (verbatim goal, acceptance criteria, profile, `allow_deploy` default false,
    the budget: `max_iterations`, `max_tokens`, `wall_deadline`, `chunk_timeout_minutes`
-   (default 240), and the git-flow fields
+   (default 480), and the git-flow fields
    `base_branch`, `stop_after`, and `merge_policy` extracted from the goal text: "branch off
    develop" sets `base_branch: develop`; "stop at the first PR" sets `stop_after: first_pr`;
    "merge if QA and code review sign off" sets `merge_policy: auto_on_signoff`.
@@ -166,12 +168,23 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
 
 1. **Budget guard (before any work, always).** Read `progress.json`. If `iterations_spent >= max_iterations`
    OR `tokens_spent >= max_tokens` OR now past `wall_deadline`: set `status:"budget_exhausted"`
-   and go to TERMINAL.
+   and go to TERMINAL. One exception: a wake carrying a chunk-exec completion notification
+   records that wave first (step 3 routes it to step 5) and applies this guard at step 8, so a
+   finished wave's verdicts are never dropped.
 2. **Stop check.** If every task is `done && passes` -> `status:"done"`. If research and
    `research_converged` (below) -> `status:"converged"`. If `stuck_counter >= 3` ->
    `status:"stuck"`. Any of these -> go to TERMINAL.
-3. **Pick the current chunk.** The lowest-ordered chunk that still has incomplete tasks and whose
-   prior chunks are all merged. Ensure its branch exists off `base_branch`:
+3. **In-flight check, then pick the current chunk.** If `progress.json.inflight` is set, a
+   chunk-exec wave is already running for this run, so never dispatch another:
+   - This wake carries that workflow's completion notification: clear `inflight` and go to step 5
+     with its verdict list.
+   - No completion yet, and less than `goal.md.chunk_timeout_minutes` (default 480) has passed
+     since `inflight.started_at`: the chunk is still working. Go to step 8.
+   - Older than that: the chunk is hung. `TaskStop` its task id, set every non-done task in the
+     chunk to `pending` with `attempts++` and blocker `chunk timed out`, `stuck_counter++`, clear
+     `inflight`, and continue at step 6 (a later wake re-dispatches the chunk).
+   Otherwise pick the lowest-ordered chunk that still has incomplete tasks and whose prior chunks
+   are all merged. Ensure its branch exists off `base_branch`:
    `git -C <git_root> checkout -b harness/<run-id>-<chunk> <base_branch>` (create once). If any task
    in the chunk looks far too big, `Task(loop-planner)` to re-decompose the chunk, persist, re-pick.
 4. **Fan out the chunk in parallel (chunk-exec workflow).**
@@ -185,15 +198,9 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
    Every dispatch and return emits telemetry, so the console graph lights up all concurrent
    agents. The workflow returns a per-task verdict list. See "Parallel chunk execution" below.
 
-   The Workflow tool returns at once with a task id and runs in the background. Before anything
-   else, write `inflight: {chunk, task_id, started_at}` into `progress.json`, then go straight to
-   step 8 and end this wake; the completion notification re-invokes you with the verdict list and
-   you continue at step 5 (clear `inflight` first). On a wake where `inflight` is set and no
-   completion notification arrived: if less than `goal.md.chunk_timeout_minutes` (default 240)
-   has passed since `started_at`, the chunk is still working, so do step 0 only and go to step 8.
-   Otherwise the chunk is hung: `TaskStop` its task id, set every non-done task in the chunk to
-   `pending` with `attempts++` and blocker `chunk timed out`, `stuck_counter++`, clear `inflight`,
-   and continue at step 6 (a later wake re-dispatches the chunk).
+   The Workflow tool returns at once with a task id and runs in the background. Write
+   `inflight: {chunk, task_id, started_at}` into `progress.json` right away, then go to step 8 and
+   end this wake. The completion notification re-invokes you; step 3 routes it to step 5.
 
    **ALWAYS go through the workflow, including for remediation.** Every task runs via
    chunk-exec, first attempt and follow-up alike. Do NOT hand-dispatch a producer yourself, and
@@ -237,7 +244,8 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
    - `none`: leave the PR open for a human.
    Then, if `goal.md.stop_after` is now satisfied (e.g. `first_pr` and a PR was just opened, or a
    named chunk/task completed), set `status:"checkpoint"` and go to TERMINAL.
-8. **Schedule next or stop.** Re-run the stop check. If terminal, go to TERMINAL. Otherwise, if
+8. **Schedule next or stop.** Re-run the budget guard and the stop check (steps 1 and 2). If
+   terminal, go to TERMINAL. Otherwise, if
    running under `/loop`, call `ScheduleWakeup` with `prompt:"/albert --resume <run-id>"`,
    `delaySeconds: 1800`, and a short reason. That delay is a fallback heartbeat, not the cadence:
    a chunk-exec completion notification wakes you the moment the wave finishes, and the heartbeat
@@ -247,7 +255,10 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
 ### TERMINAL (any stop condition)
 
 0. If `progress.json.inflight` is set, `TaskStop` that task id and clear it, so a budget or
-   deadline stop never leaves a chunk-exec wave running behind a finished run.
+   deadline stop never leaves a chunk-exec wave running behind a finished run. If the current
+   chunk merged any light task but never reached step 7, run `Task(loop-qa)` on the chunk branch
+   now and file its findings as tasks (they carry into a resume): merged work must not leave the
+   run without a QA pass.
 1. `Task(loop-cleanup)` for a final tidy so the tree is merge-ready.
 2. `Task(loop-scribe)` with the terminal `status` to write the final report + LOG to the project's
    docs convention.
@@ -285,18 +296,22 @@ the engine that runs a whole chunk's tasks concurrently. It reads `tasks.json` /
   is not a pass for these, and "could not render" is a failure, not a default pass. Design tasks
   always get a `loop-designer` review gate even if the plan did not request one; for a light task
   that gate judges the producer's screenshots and the diff while the verifier re-renders, so the
-  page is rendered twice, not three times.
+  page is rendered twice, not three times. That gate's design-system check therefore rests on
+  producer-chosen captures; the pass itself still rests on the verifier's own render.
 - **Model tiers + escalation.** Each producer runs on its task's `model` (haiku/sonnet/opus). If the
   independent verify fails, the task retries once on the next tier up before being marked blocked.
-- **Pipeline, no barrier, two shapes.** A task the planner rated `haiku` or `sonnet` is light:
-  after produce, its independent verify and its gates run at the same time, and per-task QA is
+- **Pipeline, no barrier, two shapes.** The planner's model tier is its difficulty signal and
+  `sonnet` is its default, so most tasks are light: after produce, the independent verify and the
+  gates run at the same time, the verifier and reviewers run at default effort, and per-task QA is
   skipped because the chunk sign-off (LOOP step 7) runs `loop-qa` on the merged branch anyway; if
-  `merge_policy` is `none` there is no chunk sign-off, so the per-task QA stays. An `opus` task is
-  heavy and keeps the full produce -> verify -> gates -> QA chain with reviewers at high effort.
-  Measured before this split: the serial chain cost 30 to 65 minutes per task regardless of size
-  while builds and tests took seconds. The independent verifier is never skipped in either shape.
-  A fast task reaches sign-off while a slow one is still building. Intra-chunk `depends_on` holds
-  a task until its in-chunk prerequisites have merged.
+  `merge_policy` is `none` there is no chunk sign-off, so the per-task QA stays. A task the planner
+  rated `opus`, and every task in a research run, is heavy: the full produce -> verify -> gates ->
+  QA (or skeptic) chain with the verifier and reviewers at high effort. The shape follows the
+  planned tier even when a retry escalates the model. Measured before this split: the serial
+  chain cost 30 to 65 minutes per task regardless of size while builds and tests took seconds.
+  The independent verifier is never skipped in either shape. A fast task reaches sign-off while a
+  slow one is still building. Intra-chunk `depends_on` holds a task until its in-chunk
+  prerequisites have merged.
 - **Deadlines.** Every agent the workflow spawns is raced against a wall-clock ceiling (produce 60
   min, verify 30, gate 20, QA 30, skeptic 45; design tasks get longer since they render pages). A
   step that times out is recorded as a FAIL with blocker `timed out`, never as a pass, and the hung

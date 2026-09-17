@@ -162,10 +162,12 @@ const CHUNK_QA = (plan.merge_policy || 'auto_on_signoff') !== 'none';
 // never nests under the chunk branch ref, which would be a git file/directory conflict.
 const taskBranch = (id) => `${CHUNK_BRANCH}--${id}`;
 
-// The planner's tier is the size signal. A haiku or sonnet task is light: its verify and its
-// gates overlap, per-task QA defers to the chunk sign-off, and reviewers run at default effort.
-// An opus task keeps the full serial chain at high effort. Measured before this split: the
-// chain cost 30 to 65 minutes per task regardless of size while builds and tests took seconds.
+// The planner's tier is its difficulty signal and sonnet is its default, so most tasks are
+// light: verify and gates overlap, per-task QA defers to the chunk sign-off, and the verifier
+// and reviewers run at default effort. Only work the planner rated opus, and every research
+// task, keeps the full serial chain at high effort. The shape follows the planned tier even
+// when a retry escalates the model. Measured before this split: the chain cost 30 to 65
+// minutes per task regardless of size while builds and tests took seconds.
 function isLight(t) {
   return !IS_RESEARCH && (t.model || 'sonnet') !== 'opus';
 }
@@ -231,8 +233,9 @@ function designGatePrompt(t, producerEvidence) {
     return 'This is a VISUAL review: render the affected page, look at it at a desktop and a narrow width, and judge the RENDERED result, not just the diff. Confirm the project design system, spacing and color scheme were not altered beyond what the task asked for, and that the accessibility score did not regress.';
   }
   // The producer already rendered and the independent verifier is re-rendering right now, so
-  // this reviewer judging from the producer's captures drops the third render without losing
-  // an independent one: the verifier's own screenshots are still what decides the pass.
+  // this reviewer judging from the producer's captures drops the third render. The pass itself
+  // still rests on the verifier's own screenshots; what this gate gives up is an independent
+  // look for design-system drift, which it now judges from producer-chosen captures.
   return `This is a VISUAL review. The producer captured screenshots at a desktop and a narrow width plus a Lighthouse accessibility score; its evidence: ${producerEvidence.length ? producerEvidence.join(', ') : '(none reported)'}. Judge from those captures and the diff: confirm the project design system, spacing and color scheme were not altered beyond what the task asked for, and that the accessibility score did not regress. Do not start the dev server or re-render; the independent verifier is doing that separately. If the screenshots are missing or unreadable, return pass:false with notes "producer evidence missing".`;
 }
 
@@ -287,6 +290,7 @@ ${r.criterion
   : r.agentType === 'loop-designer'
     ? designGatePrompt(t, producerEvidence)
     : `Review as ${r.agentType}.`}
+${isLight(t) ? 'The independent verifier is building and testing in this worktree right now: read the diff and the code only, run no build, test or install commands, and do not change git state.' : ''}
 Telemetry at end: ${emit('gate.result', r.agentType, 'controller', t.id + ' ' + r.gate, t.id)}. Return {pass, notes}.`,
       reviewOpts(t, { label: `gate:${t.id}:${r.gate}`, phase: 'Execute', schema: GATE, agentType: r.agentType }))));
   // Every requested gate is represented in `resolved`, so a dead critic still counts as a fail
