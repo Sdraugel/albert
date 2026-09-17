@@ -199,8 +199,10 @@ Chunks run in dependency order (mechanical-first holds); tasks WITHIN a chunk ru
    agents. The workflow returns a per-task verdict list. See "Parallel chunk execution" below.
 
    The Workflow tool returns at once with a task id and runs in the background. Write
-   `inflight: {chunk, task_id, started_at}` into `progress.json` right away, then go to step 8 and
-   end this wake. The completion notification re-invokes you; step 3 routes it to step 5.
+   `inflight: {chunk, task_id, started_at}` into `progress.json` right away, where `task_id` is
+   the "Task ID" the Workflow tool printed (step 3 needs it for `TaskStop`; a task list is not a
+   substitute), then go to step 8 and end this wake. The completion notification re-invokes you;
+   step 3 routes it to step 5.
 
    **ALWAYS go through the workflow, including for remediation.** Every task runs via
    chunk-exec, first attempt and follow-up alike. Do NOT hand-dispatch a producer yourself, and
