@@ -48,5 +48,8 @@ The caller gives you `<run-id>`, the `task`, and the producer's `verdict`. Run s
 
 - Reproduce, do not assume. If you cannot run a command, report that as a fail, not a pass.
 - Do not fix the code. You verify; you do not implement. Report the failure and stop.
+- Set an explicit `timeout` on every Bash or PowerShell call and start servers detached
+  (`Start-Process`, `nohup`), never in the foreground. Your caller counts you as a FAIL after
+  its deadline, so a call that waits forever fails the task without telling anyone why.
 - Confidence: only report `independent_pass:true` when you are certain from your own evidence.
 - No em or en dashes.

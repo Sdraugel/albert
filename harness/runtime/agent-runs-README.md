@@ -11,7 +11,7 @@ committed into that project's own git repo; only the bookkeeping below is global
   - `goal.md` - the goal, acceptance criteria, profile, budget, and `allow_deploy` flag.
   - `project.json` - auto-detected project facts (path, git root, stack, verify commands, docs convention).
   - `tasks.json` - the granular, independently-verifiable task list. `passes:true` only with evidence.
-  - `progress.json` - iteration, budget spent, best-so-far, blockers, status. The resume anchor.
+  - `progress.json` - iteration, budget spent, best-so-far, blockers, status, and `inflight` (the chunk-exec workflow currently running: chunk, task id, started_at) so a heartbeat wake never re-dispatches a live chunk. The resume anchor.
   - `init.ps1` (Windows) or `init.sh` (macOS/Linux) - idempotent environment bootstrap for this project.
   - `ledger.csv` - research trial ledger (append-only).
   - `events.jsonl` - append-only activity stream, one JSON event per line, written via `_emit.mjs`; the Albert Console tails it.

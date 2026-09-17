@@ -23,6 +23,9 @@ Thanks for your interest. A few ground rules keep this project simple, private, 
 ## Before you open a PR
 
 - Run `node --check` on every `.mjs` / `.js` file you touched.
+- If you changed `harness/workflows/chunk-exec.js`, run `node tools/test-chunk-exec.mjs`: it
+  executes the script against stubbed agents and checks the pipeline shapes, deadlines and
+  dependency handling.
 - If you changed the console, run it (`console\restart.cmd` on Windows, or
   `console/stop.sh` then `console/start.sh` on macOS/Linux) and confirm the affected view
   still renders in the browser.
